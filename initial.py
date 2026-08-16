@@ -25,13 +25,13 @@ def main():
                 logs.append(xes_importer.apply(str(f)))
 
     # -- preprocessing
-    preprocess(logs)
+    trace_groups = preprocess(logs)
 
     # -- merging
-    merged_Log = mergeLogs(logs)
+    merged_Log = mergeLogs(logs, trace_groups)
 
     xes_exporter.apply(merged_Log, f"{sys.argv[1]}/merged_log_v{merged_log_version}.xes")
-    print("logs merged")
+    print("Logs merged")
 
     # -- conformance checking
 

@@ -8,12 +8,10 @@ TRACE_ID = "concept:name"
 
 CONCEPT_NAME = "concept:name"
 ORG_GROUP = "org:group"
-COMMUNICATION_MODE = "communicationMode"
-MSG_TYPE = "msgType"
+COMMUNICATION_MODE = "msgType"
+MSG_TYPE = "msgFlow"
 MSG_INSTANCE_ID = "msgInstanceId"
 TIMESTAMP = "time:timestamp"
-
-trace_id_map = {}
 
 
 # Prerequisites:
@@ -26,13 +24,15 @@ trace_id_map = {}
 
 
 # merges the logs and returns the merged log -> to merge sequentially
-def mergeLogs(logs):
+def mergeLogs(logs, trace_groups=None):
     merged_log = EventLog()  # Eventuell später Extensions/Globals hinzufügen, falls gewünscht
     # for fixed (shared) traceId
     # for i in range(len(logs)):
     #    merged_log = mergeTwoLogs(merged_log, logs[i])
     # for matching via msgInstanceId
-    merged_log = merge_via_msg_id(logs)
+    if not trace_groups:
+        *trace_groups, uf = group_traces(logs)
+    merged_log = merge(*trace_groups)
     return merged_log
 
 
@@ -70,7 +70,7 @@ def mergeTwoLogs(merged_log, log):
 
 # merges the traces using union-find for trace matching
 # composed_id = (log_id, trace_id)
-def merge_via_msg_id(logs):
+def group_traces(logs):
     trace_list = []
     composed_id_to_trace = {}
     for log in logs:
@@ -83,7 +83,8 @@ def merge_via_msg_id(logs):
     for composed_id in trace_list:
         trace = composed_id_to_trace[composed_id]
         for event in trace:
-            connected_traces[event[MSG_INSTANCE_ID]].append(composed_id)  # connects all traces with msg exchange between them
+            connected_traces[event[MSG_INSTANCE_ID]].append(
+                composed_id)  # connects all traces with msg exchange between them
 
     for traces in connected_traces.values():
         for i in range(len(traces)):
@@ -94,9 +95,13 @@ def merge_via_msg_id(logs):
         root = uf.find(composed_id)
         groups_of_traces[root].append(composed_id)
 
+    return groups_of_traces, composed_id_to_trace, uf
+
+
+def merge(groups_of_traces, composed_id_to_trace):
     merged_log = EventLog(attributes={LOG_ID: f"merged_log_{date.today()}"})
     for i, (root, composed_ids) in enumerate(groups_of_traces.items()):
-        merged_trace = Trace(attributes={TRACE_ID: str(i)})
+        merged_trace = Trace(attributes={TRACE_ID: str(i + 1)})
         events = [event for composed_id in composed_ids for event in composed_id_to_trace[composed_id]]
         events.sort(key=lambda ev: ev[TIMESTAMP])
 
@@ -119,6 +124,11 @@ def create_new_event(event):
     new_event["time:timestamp"] = event.get(TIMESTAMP)
 
     return new_event
+
+
+# Validates that all messages are in the correct order (sent -> receive)
+def validate_message_ordering(log):
+    ...
 
 
 class UnionFind:
