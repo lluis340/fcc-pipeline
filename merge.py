@@ -6,10 +6,10 @@ from pm4py.objects.log.obj import Event, Trace, EventLog
 LOG_ID = "concept:name"
 TRACE_ID = "concept:name"
 
-CONCEPT_NAME = "concept:name"
+EVENT_ID = "concept:name"
 ORG_GROUP = "org:group"
-COMMUNICATION_MODE = "msgType"
-MSG_TYPE = "msgFlow"
+COMMUNICATION_MODE = "communicationMode"
+MSG_TYPE = "msgType"
 MSG_INSTANCE_ID = "msgInstanceId"
 TIMESTAMP = "time:timestamp"
 
@@ -44,11 +44,11 @@ def mergeTwoLogs(merged_log, log):
         # find trace through identifier
         trace_id = trace.attributes.get(TRACE_ID)
         for i, merged_trace in enumerate(merged_log):
-            if merged_trace.attributes.get(CONCEPT_NAME) == trace_id:
+            if merged_trace.attributes.get(EVENT_ID) == trace_id:
                 pos = i
                 break
         else:
-            merged_log.append(Trace(attributes={CONCEPT_NAME: trace_id}))
+            merged_log.append(Trace(attributes={EVENT_ID: trace_id}))
             pos = len(merged_log) - 1
 
         for event in log[trace_index]:
@@ -101,7 +101,7 @@ def group_traces(logs):
 def merge(groups_of_traces, composed_id_to_trace):
     merged_log = EventLog(attributes={LOG_ID: f"merged_log_{date.today()}"})
     for i, (root, composed_ids) in enumerate(groups_of_traces.items()):
-        merged_trace = Trace(attributes={TRACE_ID: str(i + 1)})
+        merged_trace = Trace(attributes={TRACE_ID: f"trace_{str(i + 1)}"})
         events = [event for composed_id in composed_ids for event in composed_id_to_trace[composed_id]]
         events.sort(key=lambda ev: ev[TIMESTAMP])
 
@@ -116,7 +116,7 @@ def merge(groups_of_traces, composed_id_to_trace):
 def create_new_event(event):
     new_event = Event()
     # Copy preprocessed values
-    new_event["concept:name"] = event.get(CONCEPT_NAME)
+    new_event["concept:name"] = event.get(EVENT_ID)
     new_event["org:group"] = event.get(ORG_GROUP)
     new_event["communicationMode"] = event.get(COMMUNICATION_MODE)
     new_event["msgType"] = event.get(MSG_TYPE)
@@ -132,11 +132,12 @@ def validate_message_ordering(log):
 
 
 class UnionFind:
-    def __init__(self, log_trace_tuples):
+    def __init__(self, log_trace_tuples=None):
         self.parent = {}
         self.rank = {}
-        for i in log_trace_tuples:
-            self.addTuple(i)
+        if log_trace_tuples:
+            for i in log_trace_tuples:
+                self.addTuple(i)
 
     def addTuple(self, log_trace_tuple):
         if log_trace_tuple not in self.parent:
