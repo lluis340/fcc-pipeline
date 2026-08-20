@@ -1,0 +1,3 @@
+[submodule "external/collaborationminer"]
+	path = external/collaborationminer
+	url = https://gitlab.com/janikbenzin/cm
