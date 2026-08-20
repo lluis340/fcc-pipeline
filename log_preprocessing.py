@@ -96,7 +96,7 @@ def preprocess_communication_mode(matched_events):
 
 # infers the communication for two events in case no event has sent or receive based on the same events in other traces
 # returns false if a: there are mixed send/receive relationships or b: not enough events have a comm mode
-def infer_comm_mode(composed_ids, events):
+def infer_comm_mode(composed_ids, events, treshold=0.9):
     participating_logs = {log for log in logs if log.attributes.get(LOG_ID) in {c_id[0] for c_id in composed_ids}}
     existing_comm_modes_e_1 = [e[COMMUNICATION_MODE].lower() for trace in participating_logs
                                for all_events in trace for e in all_events
@@ -109,13 +109,13 @@ def infer_comm_mode(composed_ids, events):
     if count_sent > 0 and count_receive > 0:
         return False
     elif count_sent > 0:
-        if count_sent / len(existing_comm_modes_e_1) > 0.9:
+        if count_sent / len(existing_comm_modes_e_1) > treshold:
             events[0][COMMUNICATION_MODE] = "send"
             events[1][COMMUNICATION_MODE] = "receive"
         else:
             return False
     else:
-        if count_receive / len(existing_comm_modes_e_1) > 0.9:
+        if count_receive / len(existing_comm_modes_e_1) > treshold:
             events[0][COMMUNICATION_MODE] = "receive"
             events[1][COMMUNICATION_MODE] = "send"
         else:

@@ -25,7 +25,6 @@ TIMESTAMP = "time:timestamp"
 
 # merges the logs and returns the merged log -> to merge sequentially
 def mergeLogs(logs, trace_groups=None):
-    merged_log = EventLog()  # Eventuell später Extensions/Globals hinzufügen, falls gewünscht
     # for fixed (shared) traceId
     # for i in range(len(logs)):
     #    merged_log = mergeTwoLogs(merged_log, logs[i])
