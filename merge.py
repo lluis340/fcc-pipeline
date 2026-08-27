@@ -1,17 +1,7 @@
+import config  # Naming Conventions
 from collections import defaultdict
 from datetime import date
 from pm4py.objects.log.obj import Event, Trace, EventLog
-
-# attributes from input log
-LOG_ID = "concept:name"
-TRACE_ID = "concept:name"
-
-EVENT_ID = "concept:name"
-ORG_GROUP = "org:group"
-COMMUNICATION_MODE = "communicationMode"
-MSG_TYPE = "msgType"
-MSG_INSTANCE_ID = "msgInstanceId"
-TIMESTAMP = "time:timestamp"
 
 
 # Prerequisites:
@@ -35,38 +25,6 @@ def mergeLogs(logs, trace_groups=None):
     return merged_log
 
 
-# merge two logs and return new merged log
-# only works with fixed (shared) traceId
-def mergeTwoLogs(merged_log, log):
-    for trace_index, trace in enumerate(log):
-
-        # find trace through identifier
-        trace_id = trace.attributes.get(TRACE_ID)
-        for i, merged_trace in enumerate(merged_log):
-            if merged_trace.attributes.get(EVENT_ID) == trace_id:
-                pos = i
-                break
-        else:
-            merged_log.append(Trace(attributes={EVENT_ID: trace_id}))
-            pos = len(merged_log) - 1
-
-        for event in log[trace_index]:
-            # Create new event for the merged log from current event
-            new_event = create_new_event(event)
-
-            # Should the merging not be done only by ascending timeSlots, this is where the logic for finding the
-            # correct place must go
-
-            for i in range(len(merged_log[pos])):
-                if merged_log[pos][i]["time:timestamp"] > new_event["time:timestamp"]:
-                    merged_log[pos].insert(i, new_event)
-                    break
-            else:
-                merged_log[pos].append(new_event)  # if the event is the latest event
-
-    return merged_log
-
-
 # merges the traces using union-find for trace matching
 # composed_id = (log_id, trace_id)
 def group_traces(logs):
@@ -74,15 +32,15 @@ def group_traces(logs):
     composed_id_to_trace = {}
     for log in logs:
         for trace in log:
-            trace_list.append((log.attributes[LOG_ID], trace.attributes[TRACE_ID]))
-            composed_id_to_trace[(log.attributes[LOG_ID], trace.attributes[TRACE_ID])] = trace
+            trace_list.append((log.attributes[config.ATTRIBUTES.log_id], trace.attributes[config.ATTRIBUTES.trace_id]))
+            composed_id_to_trace[(log.attributes[config.ATTRIBUTES.log_id], trace.attributes[config.ATTRIBUTES.trace_id])] = trace
 
     uf = UnionFind(trace_list)
     connected_traces = defaultdict(list)
     for composed_id in trace_list:
         trace = composed_id_to_trace[composed_id]
         for event in trace:
-            connected_traces[event[MSG_INSTANCE_ID]].append(
+            connected_traces[event[config.ATTRIBUTES.msg_instance_id]].append(
                 composed_id)  # connects all traces with msg exchange between them
 
     for traces in connected_traces.values():
@@ -98,11 +56,11 @@ def group_traces(logs):
 
 
 def merge(groups_of_traces, composed_id_to_trace):
-    merged_log = EventLog(attributes={LOG_ID: f"merged_log_{date.today()}"})
+    merged_log = EventLog(attributes={config.ATTRIBUTES.log_id: f"merged_log_{date.today()}"})
     for i, (root, composed_ids) in enumerate(groups_of_traces.items()):
-        merged_trace = Trace(attributes={TRACE_ID: f"trace_{str(i + 1)}"})
+        merged_trace = Trace(attributes={config.ATTRIBUTES.trace_id: f"trace_{str(i + 1)}"})
         events = [event for composed_id in composed_ids for event in composed_id_to_trace[composed_id]]
-        events.sort(key=lambda ev: ev[TIMESTAMP])
+        events.sort(key=lambda ev: ev[config.ATTRIBUTES.timestamp])
 
         for e in events:
             new_event = create_new_event(e)
@@ -115,12 +73,12 @@ def merge(groups_of_traces, composed_id_to_trace):
 def create_new_event(event):
     new_event = Event()
     # Copy preprocessed values
-    new_event["concept:name"] = event.get(EVENT_ID)
-    new_event["org:group"] = event.get(ORG_GROUP)
-    new_event["communicationMode"] = event.get(COMMUNICATION_MODE)
-    new_event["msgType"] = event.get(MSG_TYPE)
-    new_event["msgInstanceID"] = event.get(MSG_INSTANCE_ID)
-    new_event["time:timestamp"] = event.get(TIMESTAMP)
+    new_event["concept:name"] = event.get(config.ATTRIBUTES.event_id)
+    new_event["org:group"] = event.get(config.ATTRIBUTES.org_group)
+    new_event["communicationMode"] = event.get(config.ATTRIBUTES.communication_mode)
+    new_event["msgType"] = event.get(config.ATTRIBUTES.msg_type)
+    new_event["msgInstanceID"] = event.get(config.ATTRIBUTES.msg_instance_id)
+    new_event["time:timestamp"] = event.get(config.ATTRIBUTES.timestamp)
 
     return new_event
 
