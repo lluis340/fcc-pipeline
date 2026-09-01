@@ -40,6 +40,8 @@ def group_traces(logs):
     for composed_id in trace_list:
         trace = composed_id_to_trace[composed_id]
         for event in trace:
+            if event.get("remove_from_merge"):
+                continue
             connected_traces[event[config.ATTRIBUTES.msg_instance_id]].append(
                 composed_id)  # connects all traces with msg exchange between them
 
@@ -63,6 +65,8 @@ def merge(groups_of_traces, composed_id_to_trace):
         events.sort(key=lambda ev: ev[config.ATTRIBUTES.timestamp])
 
         for e in events:
+            if e.get("remove_from_merge"):
+                continue
             new_event = create_new_event(e)
             merged_trace.append(new_event)
         merged_log.append(merged_trace)
