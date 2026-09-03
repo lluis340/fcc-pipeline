@@ -57,12 +57,11 @@ def merge(groups_of_traces, composed_id_to_trace):
     merged_log = EventLog(attributes={config.ATTRIBUTES.log_id: f"merged_log_{date.today()}"})
     for i, (root, composed_ids) in enumerate(groups_of_traces.items()):
         merged_trace = Trace(attributes={config.ATTRIBUTES.trace_id: f"trace_{str(i + 1)}"})
-        events = [event for composed_id in composed_ids for event in composed_id_to_trace[composed_id]]
+        events = [event for composed_id in composed_ids for event in composed_id_to_trace[composed_id]
+                  if not event.get("remove_from_merge")]
         events.sort(key=lambda ev: ev[config.ATTRIBUTES.timestamp])
 
         for e in events:
-            if e.get("remove_from_merge"):
-                continue
             new_event = create_new_event(e)
             merged_trace.append(new_event)
         merged_log.append(merged_trace)
