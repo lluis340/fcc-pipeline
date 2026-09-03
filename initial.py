@@ -60,20 +60,19 @@ def main():
     )
 
     # -- preprocessing
-    logs = create_public_logs(logs)
     if dirty_logs:
         dirty_logs = create_public_logs(dirty_logs)
 
-    trace_groups = preprocess(logs)
+    preprocess(logs)
 
     # -- merging
-    merged_log = mergeLogs(logs, trace_groups)
+    merged_log = mergeLogs(logs)
+    merged_log_path = f"{sys.argv[1]}/merged_logs/merged_log_v{exec_num}.xes"
+    xes_exporter.apply(merged_log, merged_log_path)
+
     merged_dirty_log = None
     if dirty_logs:
         merged_dirty_log = mergeLogs(dirty_logs)
-
-    merged_log_path = f"{sys.argv[1]}/merged_logs/merged_log_v{exec_num}.xes"
-    xes_exporter.apply(merged_log, merged_log_path)
 
     # -- discover model with collaboration miner
     cpn, return_t = cm.discover(disc_type=pm4py.discover_petri_net_inductive,
@@ -90,7 +89,6 @@ def main():
         for variant_key, report in result["PartyA"]:
             if report["cost"] > 0:
                 print(variant_key, report["extra_activities"], report['frequency'], report["sender_moves"])
-    # check_conformance(merged_log, logs, cpn, return_t)
 
     # -- results
     generate_results(result)

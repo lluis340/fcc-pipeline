@@ -37,7 +37,6 @@ def check_conformance(log, logs, input_cpn, input_return_t):
     ''' Check Conformance '''
     res = align_public_logs()
 
-    # TODO: Precision on federated level, relabeling removes all possible deviations/escaping edges
     result = evaluate_precision.apply(log, *cpn, variant=evaluate_precision.Variants.ALIGN_ETCONFORMANCE)
     overall_fitness = compute_overall_fitness(res)
     model_generalization = align_collaborative_log(log)
@@ -50,7 +49,7 @@ def check_conformance(log, logs, input_cpn, input_return_t):
 
 
 def prepare_cc_data(net, initial_marking, final_marking):
-    global buddy_events, lone_events, transition_to_org_mapping, communication_points, t_com, t_int, \
+    global buddy_events, lone_events, transition_to_org_mapping, communication_points, \
         activity_to_cp, label_to_transition_mapping, public_logs, trace_groups, uf
 
     concepts, sent_msgs, rec_msgs, async_types, nets = return_t[0], return_t[1], return_t[2], return_t[5], return_t[6]
@@ -115,9 +114,9 @@ def align_collaborative_log(log, evaluation=False):
     representative_traces = {}
     # Get Trace variants from merged log
     trace_variants = pm4py.get_variants(log,
-                                        activity_key=config.ATTRIBUTES.event_id,
-                                        timestamp_key=config.ATTRIBUTES.timestamp,
-                                        case_id_key=config.ATTRIBUTES.trace_id)
+                                        activity_key="concept:name",
+                                        timestamp_key="time:timestamp",
+                                        case_id_key="concept:name")
 
     model_cost_function = {t: 0 if t.label is None else STD_MODEL_LOG_MOVE_COST for t in net.transitions}
     sync_cost_function = {t: 0 for t in net.transitions}

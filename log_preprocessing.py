@@ -29,8 +29,6 @@ def preprocess(input_logs):
     preprocess_msg_ids(unmatched_events)
     preprocess_timestamps()
 
-    return None
-
 
 def match_events_by_message_id():
     global logs
