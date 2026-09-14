@@ -37,13 +37,15 @@ def check_conformance(log, logs, input_cpn, input_return_t):
     ''' Check Conformance '''
     res = align_public_logs()
 
-    result = evaluate_precision.apply(log, *cpn, variant=evaluate_precision.Variants.ALIGN_ETCONFORMANCE)
+    precision = compute_precision(log)
     overall_fitness = compute_overall_fitness(res)
     model_generalization = align_collaborative_log(log)
+    simplicity = compute_simplicity(cpn[0])
 
     print(f"Fitness: {overall_fitness}")
-    print(f"Precision: {result}")
+    print(f"Precision: {precision}")
     print(f"Generalization: {model_generalization}")
+    print(f"Simplicity: {simplicity}")
 
     return res
 
@@ -132,7 +134,8 @@ def align_collaborative_log(log, evaluation=False):
             Params.PARAM_MODEL_COST_FUNCTION: model_cost_function,
             Params.PARAM_SYNC_COST_FUNCTION: sync_cost_function,
             Params.PARAM_TRACE_COST_FUNCTION: trace_cost_function,
-            Params.PARAM_ALIGNMENT_RESULT_IS_SYNC_PROD_AWARE: True  # result["alignment"] is now tuple(2) with label and name of the transition
+            Params.PARAM_ALIGNMENT_RESULT_IS_SYNC_PROD_AWARE: True
+            # result["alignment"] is now tuple(2) with label and name of the transition
         }
 
         alignments_result[c_id] = (alignments.apply(variant[0], *cpn,
@@ -149,9 +152,9 @@ def align_collaborative_log(log, evaluation=False):
                 continue
             n_occ[model_trans_name] += freq
 
-    visited = {name: c for name, c in n_occ.items() if c > 0}
-    if visited:
-        model_generalization = 1 - sum(math.sqrt(1.0 / c) for c in visited.values()) / len(visited)
+    if net.transitions:
+        model_generalization = 1 - sum(math.sqrt(1.0 / n_occ.get(t.name, 0)) if n_occ.get(t.name, 0) > 0 else 1.0
+                                       for t in net.transitions) / len(net.transitions)
     else:
         model_generalization = 0.0  # Should not be possible in any model discovered from the CM
 
@@ -173,14 +176,15 @@ def align_public_logs():
     for concept, (log, net, i_m, f_m) in projections.items():
         log_id_value = log.attributes[config.ATTRIBUTES.log_id]
 
-        trace_variants = pm4py.get_variants(log,
-                                            activity_key=config.ATTRIBUTES.event_id,
-                                            timestamp_key=config.ATTRIBUTES.timestamp,
-                                            case_id_key=config.ATTRIBUTES.trace_id)
         for t in net.transitions:
             # τ-Relabeling
             if concept not in transition_to_org_mapping.get(t.name, set()):
                 t.label = None  # τ = None for pm4py
+
+        trace_variants = pm4py.get_variants(log,
+                                            activity_key=config.ATTRIBUTES.event_id,
+                                            timestamp_key=config.ATTRIBUTES.timestamp,
+                                            case_id_key=config.ATTRIBUTES.trace_id)
 
         model_cost_function = {t: 0 if t.label is None else STD_MODEL_LOG_MOVE_COST for t in net.transitions}
         sync_cost_function = {t: 0 for t in net.transitions}
@@ -345,6 +349,19 @@ def compute_overall_fitness(orgs_alignments):
             total_bwc += report["bwc"] * freq
 
     return 1 - total_cost / total_bwc if total_bwc > 0 else 0.0
+
+
+def compute_precision(log):
+    return evaluate_precision.apply(log, *cpn, variant=evaluate_precision.Variants.ALIGN_ETCONFORMANCE)
+
+
+def compute_simplicity(net):
+    # currently only the overall size of the model, like cm
+    return {
+        "size": len(net.places) + len(net.transitions),
+        "places": len(net.places),
+        "transitions": len(net.transitions),
+    }
 
 
 # TODO: Generate readable output for user

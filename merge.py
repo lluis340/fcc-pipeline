@@ -16,7 +16,7 @@ from pm4py.objects.log.obj import Event, Trace, EventLog
 # merges the logs and returns the merged log -> to merge sequentially
 def mergeLogs(logs, trace_groups=None):
     if not trace_groups:
-        *trace_groups, uf = group_traces(logs)
+        *trace_groups, _ = group_traces(logs)
     merged_log = merge(*trace_groups)
     return merged_log
 
