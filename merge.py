@@ -1,28 +1,31 @@
-import config  # Naming Conventions
+import random
+
+import config
 from collections import defaultdict
 from datetime import date
 from pm4py.objects.log.obj import Event, Trace, EventLog
 
 
-# Prerequisites:
-# All events that are contained in these logs have message exchange activities
-# All events have the same attribute names, as well as the same attributes
-# All events are totally ordered based on their ascending timestamp
-
-# Possible:
-# All traces where organizations interact with each other share the same concept:Name throughout the logs
-
-
 # merges the logs and returns the merged log -> to merge sequentially
-def mergeLogs(logs, trace_groups=None):
-    if not trace_groups:
-        *trace_groups, _ = group_traces(logs)
-    merged_log = merge(*trace_groups)
+def mergeLogs(logs, holdout_trace_group_set=False, holdout_ratio=0.2, seed=None):
+    trace_groups, composed_id_to_trace, uf = group_traces(logs)
+
+    if holdout_trace_group_set:
+        roots = list(trace_groups.keys())
+        random.Random(seed).shuffle(roots)
+        holdout_roots = set(roots[:round(len(roots) * holdout_ratio)])
+
+        train_groups = {root: ids for root, ids in trace_groups.items() if root not in holdout_roots}
+        holdout_groups = {root: trace_groups[root] for root in holdout_roots}
+
+        merged_log = merge(train_groups, composed_id_to_trace)
+        return merged_log, (holdout_groups, composed_id_to_trace, uf)
+
+    merged_log = merge(trace_groups, composed_id_to_trace)
     return merged_log
 
 
-# merges the traces using union-find for trace matching
-# composed_id = (log_id, trace_id)
+# merges the traces using union-find for trace matching; composed_id = (log_id, trace_id)
 def group_traces(logs):
     trace_list = []
     composed_id_to_trace = {}
@@ -39,13 +42,13 @@ def group_traces(logs):
             if event.get("remove_from_merge"):
                 continue
             connected_traces[event[config.ATTRIBUTES.msg_instance_id]].append(
-                composed_id)  # connects all traces with msg exchange between them
+                composed_id)
 
     for traces in connected_traces.values():
         for i in range(len(traces)):
             uf.union(traces[0], traces[i])
 
-    groups_of_traces = defaultdict(list)  # for eliminating duplicates
+    groups_of_traces = defaultdict(list)
     for composed_id in trace_list:
         root = uf.find(composed_id)
         groups_of_traces[root].append(composed_id)
@@ -71,7 +74,6 @@ def merge(groups_of_traces, composed_id_to_trace):
 
 def create_new_event(event):
     new_event = Event()
-    # Copy preprocessed values
     new_event["concept:name"] = event.get(config.ATTRIBUTES.event_id)
     new_event["org:group"] = event.get(config.ATTRIBUTES.org_group)
     new_event["communicationMode"] = event.get(config.ATTRIBUTES.communication_mode)
@@ -80,11 +82,6 @@ def create_new_event(event):
     new_event["time:timestamp"] = event.get(config.ATTRIBUTES.timestamp)
 
     return new_event
-
-
-# Validates that all messages are in the correct order (sent -> receive)
-def validate_message_ordering(log):
-    ...
 
 
 class UnionFind:

@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 import pm4py
-import config  # Naming Conventions
+import config
 from collections import defaultdict
 
 logs = []
@@ -24,9 +24,7 @@ def preprocess(input_logs):
 
     matched_events, unmatched_events = match_events_by_message_id()
 
-    preprocess_msg_type()
     preprocess_communication_mode(matched_events)
-    preprocess_msg_ids(unmatched_events)
     preprocess_timestamps()
 
 
@@ -43,19 +41,6 @@ def match_events_by_message_id():
     matched_events = {msg_id: events for msg_id, events in msg_ids_to_events.items() if len(events) == 2}
 
     return matched_events, unmatched_events
-
-
-def preprocess_msg_type():
-    ...
-
-
-def preprocess_msg_ids(unmatched_events):
-    global logs
-    # Only the single orphaned event lacks a counterpart - drop just that
-    # event, not the whole trace, so its other (matched) events still enter
-    # the merge.
-    for composed_id, event in unmatched_events.values():
-        remove_event_from_merge(event)
 
 
 def preprocess_communication_mode(matched_events):
@@ -125,11 +110,10 @@ def exist_missing_event_ids(log):
 # If missing, assign timestamp based on the median of timestamps from the msgExchange of other traces
 def preprocess_timestamps():
     all_events = [event for log in logs for trace in log for event in trace]
-    events_missing_timestamps = {
+    events_missing_timestamps = [
         ((log.attributes[config.ATTRIBUTES.log_id], trace.attributes[config.ATTRIBUTES.trace_id]), e) for log in logs
-        for trace in log for e in trace if e.get(config.ATTRIBUTES.timestamp) in (None, "")}
+        for trace in log for e in trace if e.get(config.ATTRIBUTES.timestamp) in (None, "")]
 
-    # Build reference msgPairs
     send_reference_events = {event.get(config.ATTRIBUTES.msg_instance_id): event for event in all_events
                              if event.get(config.ATTRIBUTES.timestamp) not in (None, "")
                              and event.get(config.ATTRIBUTES.communication_mode) == "send"}
@@ -150,15 +134,13 @@ def preprocess_timestamps():
             and e[config.ATTRIBUTES.msg_instance_id] == event[config.ATTRIBUTES.msg_instance_id]
             and e.get(config.ATTRIBUTES.timestamp) not in (None, "")]
         if not this_event_counterpart:
-            # print(f"No Counterpart for event: {event.get(ATTRIBUTES.event_id)} with /
-            # msgInstanceId: {event.get(ATTRIBUTES.msg_instance_id)}")
             remove_event_from_merge(event)
             continue
 
         this_msg_pairs = [(ref, ctp) for ref, ctp in msg_pairs
                           if ref[config.ATTRIBUTES.event_id] in (
                           event_id, this_event_counterpart[0][0][config.ATTRIBUTES.event_id])]
-        if not this_msg_pairs:  # no other msg_pairs exist, so both events of this exchange are discarded
+        if not this_msg_pairs:
             remove_event_from_merge(event)
             remove_event_from_merge(this_event_counterpart[0][0])
             continue
@@ -178,12 +160,3 @@ def preprocess_timestamps():
 def remove_event_from_merge(*events):
     for event in events:
         event["remove_from_merge"] = True
-
-
-# Debugging
-if __name__ == '__main__':
-    event_log = pm4py.read_xes("logs/corradini_logs/artificial_logs_5/PartyA.xes", return_legacy_log_object=True)
-    # removeIncompleteTraces(log)
-    print(sum(len(trace) for trace in event_log), f", First event: {event_log[0][0][config.ATTRIBUTES.event_id]}")
-    # remove_internal_events(event_log)
-    print(sum(len(trace) for trace in event_log), f", First event: {event_log[0][0][config.ATTRIBUTES.event_id]}")

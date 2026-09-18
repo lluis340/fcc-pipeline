@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 
 @dataclass
@@ -14,3 +14,8 @@ class AttributeNames:
 
 
 ATTRIBUTES: AttributeNames = AttributeNames()
+
+
+def set_attributes(**kwargs):
+    global ATTRIBUTES
+    ATTRIBUTES = replace(ATTRIBUTES, **kwargs)
