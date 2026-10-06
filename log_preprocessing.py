@@ -1,6 +1,6 @@
+from copy import deepcopy
 from datetime import timedelta
 
-import pm4py
 import config
 from collections import defaultdict
 
@@ -9,7 +9,7 @@ logs = []
 
 def create_public_logs(private_logs):
     global logs
-    logs = private_logs
+    logs = deepcopy(private_logs)
     for log in logs:
         for trace in log:
             trace[:] = [event for event in trace if
@@ -26,6 +26,7 @@ def preprocess(input_logs):
 
     preprocess_communication_mode(matched_events)
     preprocess_timestamps()
+    return logs
 
 
 def match_events_by_message_id():
@@ -72,8 +73,6 @@ def preprocess_communication_mode(matched_events):
                 e_2[config.ATTRIBUTES.communication_mode] = "send"
 
 
-# infers the communication for two events in case no event has sent or receive based on the same events in other traces
-# returns false if a: there are mixed send/receive relationships or b: not enough events have a comm mode
 def infer_comm_mode(composed_ids, events, treshold=0.9):
     participating_logs = {log for log in logs if
                           log.attributes.get(config.ATTRIBUTES.log_id) in {c_id[0] for c_id in composed_ids}}
@@ -103,11 +102,6 @@ def infer_comm_mode(composed_ids, events, treshold=0.9):
     return True
 
 
-def exist_missing_event_ids(log):
-    return any(e.get(config.ATTRIBUTES.event_id) is None for trace in log for e in trace)
-
-
-# If missing, assign timestamp based on the median of timestamps from the msgExchange of other traces
 def preprocess_timestamps():
     all_events = [event for log in logs for trace in log for event in trace]
     events_missing_timestamps = [
@@ -156,7 +150,6 @@ def preprocess_timestamps():
             event[config.ATTRIBUTES.timestamp] = this_event_counterpart[0][0][config.ATTRIBUTES.timestamp] + mean
 
 
-# Removes only the given event(s) from a trace, keeping the trace (and its other, unrelated events) in the merge.
 def remove_event_from_merge(*events):
     for event in events:
         event["remove_from_merge"] = True

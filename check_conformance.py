@@ -1,5 +1,4 @@
 import math
-
 import pm4py
 import config
 
@@ -15,74 +14,40 @@ from pm4py.objects.petri_net.utils.align_utils import SKIP, STD_MODEL_LOG_MOVE_C
 buddy_events = {}
 lone_events = {}
 transition_to_org_mapping = {}
-communication_points = {}
 label_to_transition_mapping = {}
 activity_to_cp = {}
-cpn = ()
-return_t = []
-public_logs = []
 trace_groups = {}
 uf = None
 
 
-def check_conformance(log, logs, input_cpn, input_return_t, existing_trace_groups=None, existing_uf=None, dirty=False):
-    global cpn, return_t, public_logs
-    cpn = input_cpn
-    return_t = input_return_t
-    public_logs = logs
+def check_conformance(collaborative_log, logs, cpn, return_t, existing_trace_groups=None, existing_uf=None, dirty=False):
+    prepare_cc_data(cpn[0], logs, return_t, existing_trace_groups, existing_uf)
 
-    ''' Create Helper Mappings for CC '''
-    prepare_cc_data(*cpn, existing_trace_groups, existing_uf)
-
-    ''' Check Conformance '''
-    res = align_public_logs()
+    res = align_public_logs(cpn, logs, return_t)
     move_report = generate_move_report(res)
 
-    overall_fitness = compute_overall_fitness(res)
-    precision = compute_precision(log)
-    model_generalization = align_collaborative_log(log)
+    overall_fitness = compute_fitness(org_report for variants in res.values() for _, org_report in variants)
+    precision = compute_precision(cpn, collaborative_log)
+    collaborative_alignment, model_generalization = align_collaborative_log(cpn, collaborative_log)
     simplicity = compute_simplicity(cpn[0])
 
     return {
         "Alignment_Report": res,
+        "Collaborative_Alignment_Report": collaborative_alignment,
         "Move_Report": move_report,
         "Fitness": overall_fitness,
         "Precision": precision,
         "Generalization": model_generalization,
         "Simplicity": simplicity
-    }, generate_visual_output(move_report, overall_fitness, precision, model_generalization, simplicity, dirty=dirty)
+    }, generate_visual_output(res, collaborative_alignment, move_report, overall_fitness, precision, model_generalization, simplicity,
+                              dirty=dirty)
 
 
-def prepare_cc_data(net, initial_marking, final_marking, existing_trace_groups=None, existing_uf=None):
-    global buddy_events, lone_events, transition_to_org_mapping, communication_points, \
-        activity_to_cp, label_to_transition_mapping, public_logs, trace_groups, uf
-
-    concepts, sent_msgs, rec_msgs, async_types, nets = return_t[0], return_t[1], return_t[2], return_t[5], return_t[6]
-
-    # Check if net is closed
-    if not verify_closed_net(net, initial_marking, final_marking):
-        raise Exception("Net is not closed")  # Missing error handling
-
-    if existing_trace_groups:
-        trace_groups = existing_trace_groups
-        uf = existing_uf
-    else:
-        trace_groups, _, uf = group_traces(public_logs)
-
-    buddy_events, lone_events = classify_miscommunication_type()
-    transition_to_org_mapping = build_transition_to_org_mapping(net, nets, concepts)
-    communication_points = build_communication_points(async_types, sent_msgs, rec_msgs)
-    activity_to_cp = build_activity_to_communication_point()
-    label_to_transition_mapping = build_label_to_transitions_mapping(net)
-
-    return True
-
-
-def align_collaborative_log(log, evaluation=False):
+def align_collaborative_log(cpn, log):
     net, i_m, f_m = cpn
     alignments_result = {}
     representative_traces = {}
-    # Get Trace variants from merged log
+
     trace_variants = pm4py.get_variants(log,
                                         activity_key="concept:name",
                                         timestamp_key="time:timestamp",
@@ -103,15 +68,12 @@ def align_collaborative_log(log, evaluation=False):
             Params.PARAM_SYNC_COST_FUNCTION: sync_cost_function,
             Params.PARAM_TRACE_COST_FUNCTION: trace_cost_function,
             Params.PARAM_ALIGNMENT_RESULT_IS_SYNC_PROD_AWARE: True
-            # result["alignment"] is now tuple(2) with label and name of the transition
         }
 
         alignments_result[c_id] = (alignments.apply(variant[0], *cpn,
                                                     variant=alignments.Variants.VERSION_STATE_EQUATION_A_STAR,
                                                     parameters=parameters), len(variant))
 
-    # Calculate Generalization
-    model_generalization = 1.0
     n_occ = defaultdict(int)
     for c_id, (result, freq) in alignments_result.items():
         for name_pair, label_pair in result["alignment"]:
@@ -120,20 +82,14 @@ def align_collaborative_log(log, evaluation=False):
                 continue
             n_occ[model_trans_name] += freq
 
-    if net.transitions:
-        model_generalization = 1 - sum(math.sqrt(1.0 / n_occ.get(t.name, 0)) if n_occ.get(t.name, 0) > 0 else 1.0
-                                       for t in net.transitions) / len(net.transitions)
-    else:
-        model_generalization = 0.0  # Should not be possible in any model discovered from the CM
-
-    if not evaluation:
-        return model_generalization
+    model_generalization = 1 - sum(math.sqrt(1.0 / n_occ.get(t.name, 0)) if n_occ.get(t.name, 0) > 0 else 1.0
+                                   for t in net.transitions) / len(net.transitions) if net.transitions else 0.0
 
     return alignments_result, model_generalization
 
 
-def align_public_logs():
-    projections = {concept: (log, *deepcopy(cpn)) for concept in return_t[0] for log in public_logs
+def align_public_logs(cpn, logs, return_t):
+    projections = {concept: (log, *deepcopy(cpn)) for concept in return_t[0] for log in logs
                    if concept in [e.get(config.ATTRIBUTES.org_group) for trace in log for e in trace]}
     move_results = {concept: list() for concept in return_t[0]}
 
@@ -141,9 +97,8 @@ def align_public_logs():
         log_id_value = log.attributes[config.ATTRIBUTES.log_id]
 
         for t in net.transitions:
-            # τ-Relabeling
             if concept not in transition_to_org_mapping.get(t.name, set()):
-                t.label = None  # τ = None for pm4py
+                t.label = None
 
         trace_variants = pm4py.get_variants(log,
                                             activity_key=config.ATTRIBUTES.event_id,
@@ -162,7 +117,6 @@ def align_public_logs():
             representative_traces[variant_key] = representative_trace
             trace_cost_function = [STD_MODEL_LOG_MOVE_COST] * len(representative_trace)
 
-            # Cost functions
             parameters = {
                 Params.PARAM_MODEL_COST_FUNCTION: model_cost_function,
                 Params.PARAM_SYNC_COST_FUNCTION: sync_cost_function,
@@ -190,14 +144,12 @@ def align_public_logs():
     return move_results
 
 
-# Enriches each move of an alignment with its move type (SYNC/LOG/MODEL), the organisation
-# it belongs to, and the communication point it participates in.
 def enrich_moves(moves, trace):
     enriched = []
     event_idx = 0
     tau_transition_count = 0
     for log_side, model_side in moves:
-        if log_side == SKIP and model_side is None:  # Silent transition
+        if log_side == SKIP and model_side is None:
             tau_transition_count += 1
             continue
         elif log_side == model_side:
@@ -227,7 +179,6 @@ def enrich_moves(moves, trace):
         if log_side != SKIP:
             event_idx += 1
 
-    # Add the preceding and following SYNC activity (where log and model were last/are next the same again)
     last_sync = None
     for entry in enriched:
         entry["preceding_sync_activity"] = last_sync
@@ -243,7 +194,6 @@ def enrich_moves(moves, trace):
     return enriched, tau_transition_count
 
 
-# Creates report with the error types of moves per variant per concept
 def create_org_conformance_report(enrichment, tau_count, alignment_result, cases):
     sync_moves, extra_activities = [], []
     for move in enrichment:
@@ -267,27 +217,23 @@ def create_org_conformance_report(enrichment, tau_count, alignment_result, cases
     }
 
 
-# actually classifies sender move, receiver move, async comm, swap
 def classify_case_moves(enrichment, composed_id, trace):
+    enrichment = [dict(move) for move in enrichment]
     correlated_group = trace_groups.get(uf.find(composed_id), ())
 
     resolved_moves = []
     event_idx = 0
     for move in enrichment:
         move_type = move['move_type']
-        if move_type == "SYNC":
-            event_idx += 1
-            continue
-
-        elif move_type == "LOG":
+        if move_type in ("LOG", "SYNC"):
             event = trace[event_idx]
             event_idx += 1
             msg_instance_id = event.get(config.ATTRIBUTES.msg_instance_id)
             resolved_moves.append((move, msg_instance_id, event))
 
         elif move_type == "MODEL":
-            msg_instance_id, lone_event = resolve_model_move_msg_instance(move, correlated_group)
-            resolved_moves.append((move, msg_instance_id, lone_event))
+            msg_instance_id, resolved_event = resolve_model_move_msg_instance(move, trace)
+            resolved_moves.append((move, msg_instance_id, resolved_event))
 
     moves_by_msg_id = defaultdict(list)
     for move, msg_instance_id, _ in resolved_moves:
@@ -297,30 +243,33 @@ def classify_case_moves(enrichment, composed_id, trace):
     swap_moves = []
     swapped_ids = set()
     for msg_instance_id, group in moves_by_msg_id.items():
-        types = {type for _, type in group}
+        types = {move_type for _, move_type in group}
         if len(group) > 1 and "LOG" in types and "MODEL" in types:
             for move, _ in group:
                 move["msgInstanceId"] = msg_instance_id
                 swap_moves.append(move)
                 swapped_ids.add(id(move))
 
-    sender_moves, receiver_moves, async_communications = [], [], []
+    sender_moves, receiver_moves, async_communications, unknown_moves = [], [], [], []
     for move, msg_instance_id, event in resolved_moves:
         if id(move) in swapped_ids:
             continue
-
-        if move['move_type'] == "LOG":
+        if move['move_type'] in ("LOG", "SYNC"):
             move["msgInstanceId"] = msg_instance_id
             if msg_instance_id in lone_events:
                 if event.get(config.ATTRIBUTES.communication_mode) == "send":
                     sender_moves.append(move)
                 else:
                     receiver_moves.append(move)
-
             elif msg_instance_id in buddy_events:
                 pair = buddy_events[msg_instance_id]
                 buddy_event = next((e for _, e in pair if e is not event), None)
                 if buddy_event is None:
+                    unknown_moves.append(move)
+                    continue
+                if (event.get(config.ATTRIBUTES.timestamp) is None
+                        or buddy_event.get(config.ATTRIBUTES.timestamp) is None):
+                    unknown_moves.append(move)
                     continue
 
                 order_violated = (
@@ -332,25 +281,19 @@ def classify_case_moves(enrichment, composed_id, trace):
                 )
                 if order_violated:
                     async_communications.append(move)
-
-        elif move['move_type'] == "MODEL":
-            if event is not None:  # event here is the matched lone_event
-                move["msgInstanceId"] = msg_instance_id
-                if event.get(config.ATTRIBUTES.communication_mode) == "send":
-                    receiver_moves.append(move)
-                else:
-                    sender_moves.append(move)
+            else:
+                unknown_moves.append(move)
 
     return {
         "composed_id": composed_id,
         "sender_moves": sender_moves,
         "receiver_moves": receiver_moves,
         "async_communications": async_communications,
-        "swap_moves": swap_moves
+        "swap_moves": swap_moves,
+        "unknown_moves": unknown_moves
     }
 
 
-# Builds move frequency maps for log/model moves and sync moves
 def compute_move_patterns(enrichment, case_count):
     pattern_frequencies = defaultdict(int)
     sync_transition_frequencies = defaultdict(int)
@@ -370,7 +313,6 @@ def compute_move_patterns(enrichment, case_count):
         else:
             gap.append(move)
 
-    # transition from the last SYNC (or the start, if there was none) to the end of the trace
     sync_transition_frequencies[(last_sync, None)] += case_count
     if gap:
         key = (tuple((m["move_type"], m["log_activity"] or m["model_activity"]) for m in gap),
@@ -380,30 +322,36 @@ def compute_move_patterns(enrichment, case_count):
     return dict(pattern_frequencies), dict(sync_transition_frequencies)
 
 
-# Aggregates the per-org, per-variant alignment cost/bwc (as produced by align_public_logs) into one fitness value
-def compute_overall_fitness(orgs_alignments):
+def compute_fitness(reports):
     total_cost = 0.0
     total_bwc = 0.0
-    for variants_alignments in orgs_alignments.values():
-        for _, report in variants_alignments:
-            freq = len(report["cases"])
-            total_cost += report["cost"] * freq
-            total_bwc += report["bwc"] * freq
+    for report in reports:
+        freq = len(report["cases"])
+        total_cost += report["cost"] * freq
+        total_bwc += report["bwc"] * freq
 
     return 1 - total_cost / total_bwc if total_bwc > 0 else 0.0
 
 
-def compute_precision(log):
+def compute_precision(cpn, log):
     return evaluate_precision.apply(log, *cpn, variant=evaluate_precision.Variants.ALIGN_ETCONFORMANCE)
 
 
 def compute_simplicity(net):
-    # currently only the overall size of the model, like cm
     return {
         "size": len(net.places) + len(net.transitions),
         "places": len(net.places),
         "transitions": len(net.transitions),
     }
+
+
+CASE_MOVE_CATEGORIES = {
+    "sender_moves": "Sender Move",
+    "receiver_moves": "Receiver Move",
+    "async_communications": "Asynchronous Communication",
+    "swap_moves": "Swapped Moves",
+    "unknown_moves": "Unknown Miscommunications",
+}
 
 
 def generate_move_report(alignment_report):
@@ -412,12 +360,18 @@ def generate_move_report(alignment_report):
     for concept, variants in alignment_report.items():
         move_frequencies = defaultdict(int)
         sync_transition_frequencies = defaultdict(int)
+        correlation_frequencies = defaultdict(int)
 
         for variant_key, variant_report in variants:
             for key, count in variant_report["pattern_frequencies"].items():
                 move_frequencies[key] += count
             for key, count in variant_report["sync_transition_frequencies"].items():
                 sync_transition_frequencies[key] += count
+            for case_report in variant_report["cases"]:
+                for category in CASE_MOVE_CATEGORIES:
+                    for move in case_report[category]:
+                        activity = move.get("log_activity") or move.get("model_activity")
+                        correlation_frequencies[(category, activity)] += 1
 
         pattern_lines = []
         for (gap, prev_sync, next_sync), count in move_frequencies.items():
@@ -430,33 +384,42 @@ def generate_move_report(alignment_report):
                 f"out of {total} total occurrences"
             )
 
+        correlation_lines = [
+            f"{count}x {CASE_MOVE_CATEGORIES[category]}: {activity}"
+            for (category, activity), count in correlation_frequencies.items() if category != "unknown_moves"
+        ]
+        unknown_miscommunication = [
+            f"{count}x {CASE_MOVE_CATEGORIES[category]}: {activity}"
+            for (category, activity), count in correlation_frequencies.items() if category == "unknown_moves"
+        ]
+
         report["organizations"][concept] = {
             "move_frequencies": dict(move_frequencies),
             "sync_transition_frequencies": dict(sync_transition_frequencies),
             "pattern_lines": pattern_lines,
+            "correlation_lines": correlation_lines,
+            "unknown_miscommunication": unknown_miscommunication
         }
 
     return report
 
 
-def generate_visual_output(move_report, overall_fitness, precision, model_generalization, simplicity, dirty=False):
-    lines = [
-        "--- \n ## Original Logs: " if not dirty else "--- \n ## Dirty Logs: ",
-        "### Overall Metrics",
-        "",
-        "| Metric | Value |",
-        "|---|---|",
-        f"| Fitness | {overall_fitness:.4f} |",
-        f"| Precision | {precision:.4f} |",
-        f"| Generalization | {model_generalization:.4f} |",
-        f"| Simplicity | Size: {simplicity['size']}, Places: {simplicity['places']}, Transitions: {simplicity['transitions']} |",
-        "",
-        "---",
-        "",
-        "### Move Patterns per Organization",
-        "",
-    ]
+def generate_visual_output(alignment_report, _, move_report, overall_fitness, precision, model_generalization,
+                           simplicity, dirty=False):
+    lines = ["--- \n ## Original Logs " if not dirty else "--- \n ## Dirty Logs ", "### Overall Metrics", "",
+             "| Metric | Value |", "|---|---|", f"| Fitness | {overall_fitness:.4f} |",
+             f"| Precision | {precision:.4f} |", f"| Generalization | {model_generalization:.4f} |",
+             f"| Simplicity | Size: {simplicity['size']}, Places: {simplicity['places']}, Transitions: {simplicity['transitions']} |",
+             "", "### Organizational Fitness Values\n | Organization | Fitness | \n |---|---|"]
 
+    for concept, org_report in alignment_report.items():
+        org_fitness = compute_fitness(report for _, report in org_report)
+        lines.append(f"|{concept}|{org_fitness:.4f}|")
+
+    lines.append("---")
+    lines.append("## Move Patterns per Organization")
+    lines.append("")
+    lines.append("")
     for concept, org_report in move_report["organizations"].items():
         lines.append(f"### {concept}")
         lines.append("")
@@ -466,6 +429,19 @@ def generate_visual_output(move_report, overall_fitness, precision, model_genera
             lines.append(f"- {line}")
         lines.append("")
 
+        if org_report["correlation_lines"]:
+            lines.append("**Further detected Message Correlation Issues:**")
+            lines.append("")
+            for line in org_report["correlation_lines"]:
+                lines.append(f"- {line}")
+            lines.append("")
+        if org_report["unknown_miscommunication"]:
+            lines.append("**Unclassifiable Correlation Issues:**")
+            lines.append("")
+            for line in org_report["unknown_miscommunication"]:
+                lines.append(f"- {line}")
+            lines.append("")
+
     output = "\n".join(lines)
     return output
 
@@ -473,26 +449,48 @@ def generate_visual_output(move_report, overall_fitness, precision, model_genera
 ''' HELPER METHODS '''
 
 
-# Resolves the msgInstanceId a MODEL move would have participated in, by matching its
-# communication point against the unmatched ("lone") events in the same group
-def resolve_model_move_msg_instance(move, correlated_group):
-    comm_point = activity_to_cp.get(move['model_activity'])
-    if comm_point is None:  # Shouldn't happen in practice
-        return None, None
+def get_globals():
+    return {
+        "buddy_events": buddy_events,
+        "lone_events": lone_events,
+        "transition_to_org_mapping": transition_to_org_mapping,
+        "label_to_transition_mapping": label_to_transition_mapping,
+        "activity_to_cp": activity_to_cp,
+        "trace_groups": trace_groups,
+        "uf": uf
+    }
 
-    candidates = [(msg_id, event) for msg_id, (ev_composed_id, event) in lone_events.items()
-                  if ev_composed_id in correlated_group
-                  and event.get(config.ATTRIBUTES.msg_type) == comm_point]
 
+def prepare_cc_data(net, logs, return_t, existing_trace_groups=None, existing_uf=None):
+    global buddy_events, lone_events, transition_to_org_mapping, \
+        activity_to_cp, label_to_transition_mapping, trace_groups, uf
+
+    concepts, sent_msgs, rec_msgs, async_types, nets = return_t[0], return_t[1], return_t[2], return_t[5], return_t[6]
+
+    if existing_trace_groups:
+        trace_groups = existing_trace_groups
+        uf = existing_uf
+    else:
+        trace_groups, _, uf = group_traces(logs)
+
+    buddy_events, lone_events = classify_miscommunication_type(logs)
+    transition_to_org_mapping = build_transition_to_org_mapping(net, nets, concepts)
+    activity_to_cp = build_activity_to_communication_point(async_types, sent_msgs, rec_msgs)
+    label_to_transition_mapping = build_label_to_transitions_mapping(net)
+
+
+def resolve_model_move_msg_instance(move, trace=None):
+    candidates = [e for e in trace
+                  if e.get(config.ATTRIBUTES.event_id) == move['model_activity']
+                  and e.get(config.ATTRIBUTES.msg_instance_id) is not None]
     if len(candidates) == 1:
-        return candidates[0]
+        return candidates[0].get(config.ATTRIBUTES.msg_instance_id), candidates[0]
     return None, None
 
 
-# Groups events with and without buddy (for miscommunication identification)
-def classify_miscommunication_type():
+def classify_miscommunication_type(logs):
     events_by_msg_id = defaultdict(list)
-    for log in public_logs:
+    for log in logs:
         log_id = log.attributes[config.ATTRIBUTES.log_id]
         for trace in log:
             composed_id = (log_id, trace.attributes[config.ATTRIBUTES.trace_id])
@@ -505,7 +503,6 @@ def classify_miscommunication_type():
     return buddies, loners
 
 
-# Resolves a move's activity label to the orgs owning the matching model transitions.
 def orgs_for_label(label):
     orgs = set()
     for t in label_to_transition_mapping.get(label, []):
@@ -513,9 +510,13 @@ def orgs_for_label(label):
     return orgs
 
 
-# Reverse index of build_communication_points: activity label -> communication point
-def build_activity_to_communication_point():
+def build_activity_to_communication_point(async_types, sent_messages, rec_messages):
     mapping = {}
+    communication_points = {cp: {
+        "senders": sent_messages.get(cp, {}),
+        "receivers": rec_messages.get(cp, {}),
+    } for cp in async_types}
+
     for cp_id, cp in communication_points.items():
         for activities in cp["senders"].values():
             for activity in activities:
@@ -526,15 +527,6 @@ def build_activity_to_communication_point():
     return mapping
 
 
-def verify_closed_net(net, initial_marking, final_marking):
-    initial_places = set(initial_marking.keys())
-    final_places = set(final_marking.keys())
-    open_input_places = {p for p in net.places if len(p.in_arcs) == 0 and p not in initial_places}
-    open_output_places = {p for p in net.places if len(p.out_arcs) == 0 and p not in final_places}
-    return not (open_input_places or open_output_places)
-
-
-# Maps transition NAMES (not objects) to participating orgs (not the transitions for the copied nets)
 def build_transition_to_org_mapping(net, nets, concepts):
     label_to_orgs = defaultdict(set)
     tau_owner_by_name = {}
@@ -554,22 +546,13 @@ def build_transition_to_org_mapping(net, nets, concepts):
     return mapping
 
 
-# Maps msgTypes to send/receive activities
-def build_communication_points(async_types, sent_messages, rec_messages):
-    return {
-        cp: {
-            "senders": sent_messages.get(cp, {}),
-            "receivers": rec_messages.get(cp, {}),
-        }
-        for cp in async_types
-    }
-
-
-# Builds map of activity label -> transitions (for potential duplicate activity names)
-# if there are now duplicates, it's just a map (name -> {transition})
 def build_label_to_transitions_mapping(net):
     index = defaultdict(list)
     for t in net.transitions:
         if t.label is not None:
             index[t.label].append(t)
     return dict(index)
+
+
+if __name__ == '__main__':
+    ...

@@ -1,31 +1,15 @@
-import random
-
 import config
 from collections import defaultdict
 from datetime import date
 from pm4py.objects.log.obj import Event, Trace, EventLog
 
 
-# merges the logs and returns the merged log -> to merge sequentially
-def mergeLogs(logs, holdout_trace_group_set=False, holdout_ratio=0.2, seed=None):
+def mergeLogs(logs):
     trace_groups, composed_id_to_trace, uf = group_traces(logs)
-
-    if holdout_trace_group_set:
-        roots = list(trace_groups.keys())
-        random.Random(seed).shuffle(roots)
-        holdout_roots = set(roots[:round(len(roots) * holdout_ratio)])
-
-        train_groups = {root: ids for root, ids in trace_groups.items() if root not in holdout_roots}
-        holdout_groups = {root: trace_groups[root] for root in holdout_roots}
-
-        merged_log = merge(train_groups, composed_id_to_trace)
-        return merged_log, (holdout_groups, composed_id_to_trace, uf)
-
     merged_log = merge(trace_groups, composed_id_to_trace)
     return merged_log
 
 
-# merges the traces using union-find for trace matching; composed_id = (log_id, trace_id)
 def group_traces(logs):
     trace_list = []
     composed_id_to_trace = {}
