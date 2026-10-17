@@ -59,12 +59,11 @@ def merge(groups_of_traces, composed_id_to_trace):
 def create_new_event(event):
     new_event = Event()
     new_event["concept:name"] = event.get(config.ATTRIBUTES.event_id)
-    new_event["org:group"] = event.get(config.ATTRIBUTES.org_group)
-    new_event["communicationMode"] = event.get(config.ATTRIBUTES.communication_mode)
+    new_event["org:group"] = event.get(config.ATTRIBUTES.org)
+    new_event["communicationMode"] = event.get(config.ATTRIBUTES.comm_mode)
     new_event["msgType"] = event.get(config.ATTRIBUTES.msg_type)
     new_event["msgInstanceID"] = event.get(config.ATTRIBUTES.msg_instance_id)
     new_event["time:timestamp"] = event.get(config.ATTRIBUTES.timestamp)
-
     return new_event
 
 

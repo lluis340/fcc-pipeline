@@ -20,13 +20,23 @@ def create_public_logs(private_logs):
 
 def preprocess(input_logs):
     global logs
+
     logs = create_public_logs(input_logs)
+    set_organization_id()
 
     matched_events, unmatched_events = match_events_by_message_id()
 
     preprocess_communication_mode(matched_events)
     preprocess_timestamps()
     return logs
+
+
+def set_organization_id():
+    global logs
+    for log in logs:
+        for trace in log:
+            for event in trace:
+                event[config.ATTRIBUTES.org] = log.attributes.get(config.ATTRIBUTES.log_id)
 
 
 def match_events_by_message_id():
@@ -46,40 +56,40 @@ def match_events_by_message_id():
 
 def preprocess_communication_mode(matched_events):
     for (c_id_1, e_1), (c_id_2, e_2) in matched_events.values():
-        if e_1.get(config.ATTRIBUTES.communication_mode) in (None, ""):
-            if e_2.get(config.ATTRIBUTES.communication_mode) in (None, ""):
+        if e_1.get(config.ATTRIBUTES.comm_mode) in (None, ""):
+            if e_2.get(config.ATTRIBUTES.comm_mode) in (None, ""):
                 successful_infer = infer_comm_mode((c_id_1, c_id_2), (e_1, e_2))
                 if not successful_infer:
                     remove_event_from_merge(e_1, e_2)
-            elif e_2.get(config.ATTRIBUTES.communication_mode).lower() in {"send", "s", "out", "o"}:
-                e_1[config.ATTRIBUTES.communication_mode] = "receive"
-                e_2[config.ATTRIBUTES.communication_mode] = "send"
+            elif e_2.get(config.ATTRIBUTES.comm_mode).lower() in {"send", "s", "out", "o"}:
+                e_1[config.ATTRIBUTES.comm_mode] = "receive"
+                e_2[config.ATTRIBUTES.comm_mode] = "send"
             else:
-                e_1[config.ATTRIBUTES.communication_mode] = "send"
-                e_2[config.ATTRIBUTES.communication_mode] = "receive"
-        elif e_2.get(config.ATTRIBUTES.communication_mode) in (None, ""):
-            if e_1.get(config.ATTRIBUTES.communication_mode).lower() in {"send", "s", "out", "o"}:
-                e_1[config.ATTRIBUTES.communication_mode] = "send"
-                e_2[config.ATTRIBUTES.communication_mode] = "receive"
+                e_1[config.ATTRIBUTES.comm_mode] = "send"
+                e_2[config.ATTRIBUTES.comm_mode] = "receive"
+        elif e_2.get(config.ATTRIBUTES.comm_mode) in (None, ""):
+            if e_1.get(config.ATTRIBUTES.comm_mode).lower() in {"send", "s", "out", "o"}:
+                e_1[config.ATTRIBUTES.comm_mode] = "send"
+                e_2[config.ATTRIBUTES.comm_mode] = "receive"
             else:
-                e_1[config.ATTRIBUTES.communication_mode] = "receive"
-                e_2[config.ATTRIBUTES.communication_mode] = "send"
+                e_1[config.ATTRIBUTES.comm_mode] = "receive"
+                e_2[config.ATTRIBUTES.comm_mode] = "send"
         else:
-            if e_1[config.ATTRIBUTES.communication_mode].lower() in {"send", "s", "out", "o"}:
-                e_1[config.ATTRIBUTES.communication_mode] = "send"
-                e_2[config.ATTRIBUTES.communication_mode] = "receive"
+            if e_1[config.ATTRIBUTES.comm_mode].lower() in {"send", "s", "out", "o"}:
+                e_1[config.ATTRIBUTES.comm_mode] = "send"
+                e_2[config.ATTRIBUTES.comm_mode] = "receive"
             else:
-                e_1[config.ATTRIBUTES.communication_mode] = "receive"
-                e_2[config.ATTRIBUTES.communication_mode] = "send"
+                e_1[config.ATTRIBUTES.comm_mode] = "receive"
+                e_2[config.ATTRIBUTES.comm_mode] = "send"
 
 
 def infer_comm_mode(composed_ids, events, treshold=0.9):
     participating_logs = {log for log in logs if
                           log.attributes.get(config.ATTRIBUTES.log_id) in {c_id[0] for c_id in composed_ids}}
-    existing_comm_modes_e_1 = [e[config.ATTRIBUTES.communication_mode].lower() for trace in participating_logs
+    existing_comm_modes_e_1 = [e[config.ATTRIBUTES.comm_mode].lower() for trace in participating_logs
                                for all_events in trace for e in all_events
                                if e[config.ATTRIBUTES.event_id] == events[0][config.ATTRIBUTES.event_id] and e.get(
-            config.ATTRIBUTES.communication_mode) is not None]
+            config.ATTRIBUTES.comm_mode) is not None]
     if not existing_comm_modes_e_1:
         return False
 
@@ -89,14 +99,14 @@ def infer_comm_mode(composed_ids, events, treshold=0.9):
         return False
     elif count_sent > 0:
         if count_sent / len(existing_comm_modes_e_1) > treshold:
-            events[0][config.ATTRIBUTES.communication_mode] = "send"
-            events[1][config.ATTRIBUTES.communication_mode] = "receive"
+            events[0][config.ATTRIBUTES.comm_mode] = "send"
+            events[1][config.ATTRIBUTES.comm_mode] = "receive"
         else:
             return False
     else:
         if count_receive / len(existing_comm_modes_e_1) > treshold:
-            events[0][config.ATTRIBUTES.communication_mode] = "receive"
-            events[1][config.ATTRIBUTES.communication_mode] = "send"
+            events[0][config.ATTRIBUTES.comm_mode] = "receive"
+            events[1][config.ATTRIBUTES.comm_mode] = "send"
         else:
             return False
     return True
@@ -110,23 +120,23 @@ def preprocess_timestamps():
 
     send_reference_events = {event.get(config.ATTRIBUTES.msg_instance_id): event for event in all_events
                              if event.get(config.ATTRIBUTES.timestamp) not in (None, "")
-                             and event.get(config.ATTRIBUTES.communication_mode) == "send"}
+                             and event.get(config.ATTRIBUTES.comm_mode) == "send"}
     receive_counterpart_events = {event.get(config.ATTRIBUTES.msg_instance_id): event for event in all_events
                                   if event.get(config.ATTRIBUTES.msg_instance_id) in {e for e in
                                                                                       send_reference_events.keys()}
                                   and event.get(config.ATTRIBUTES.timestamp) not in (None, "")
-                                  and event.get(config.ATTRIBUTES.communication_mode) == "receive"}
+                                  and event.get(config.ATTRIBUTES.comm_mode) == "receive"}
     msg_pairs = [(send_reference_events[msg_id], receive_counterpart_events[msg_id]) for msg_id
                  in send_reference_events.keys() & receive_counterpart_events.keys()]
 
     for composed_id, event in events_missing_timestamps:
-        event_id, event_comm_mode = event[config.ATTRIBUTES.event_id], event[config.ATTRIBUTES.communication_mode]
+        event_id, event_comm_mode = event[config.ATTRIBUTES.event_id], event[config.ATTRIBUTES.comm_mode]
         this_event_counterpart = [
             (e, (log.attributes[config.ATTRIBUTES.log_id], trace.attributes[config.ATTRIBUTES.trace_id]))
             for log in logs for trace in log for e in trace
-            if e[config.ATTRIBUTES.communication_mode] != event_comm_mode
-            and e[config.ATTRIBUTES.msg_instance_id] == event[config.ATTRIBUTES.msg_instance_id]
-            and e.get(config.ATTRIBUTES.timestamp) not in (None, "")]
+            if e[config.ATTRIBUTES.comm_mode] != event_comm_mode
+               and e[config.ATTRIBUTES.msg_instance_id] == event[config.ATTRIBUTES.msg_instance_id]
+               and e.get(config.ATTRIBUTES.timestamp) not in (None, "")]
         if not this_event_counterpart:
             remove_event_from_merge(event)
             continue

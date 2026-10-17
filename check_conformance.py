@@ -8,6 +8,7 @@ from merge import group_traces
 from pm4py.algo.conformance.alignments.petri_net import algorithm as alignments
 from pm4py.algo.conformance.alignments.petri_net.algorithm import Parameters as Params
 from pm4py.algo.evaluation.precision import algorithm as evaluate_precision
+from pm4py.objects.log.obj import Trace
 from pm4py.objects.petri_net.utils.align_utils import SKIP, STD_MODEL_LOG_MOVE_COST
 
 ''' Helper Mappings for CC '''
@@ -20,8 +21,8 @@ trace_groups = {}
 uf = None
 
 
-def check_conformance(collaborative_log, logs, cpn, return_t, existing_trace_groups=None, existing_uf=None, dirty=False):
-    prepare_cc_data(cpn[0], logs, return_t, existing_trace_groups, existing_uf)
+def check_conformance(collaborative_log, logs, cpn, return_t, dirty=False):
+    prepare_cc_data(cpn[0], logs, return_t)
 
     res = align_public_logs(cpn, logs, return_t)
     move_report = generate_move_report(res)
@@ -39,8 +40,8 @@ def check_conformance(collaborative_log, logs, cpn, return_t, existing_trace_gro
         "Precision": precision,
         "Generalization": model_generalization,
         "Simplicity": simplicity
-    }, generate_visual_output(res, collaborative_alignment, move_report, overall_fitness, precision, model_generalization, simplicity,
-                              dirty=dirty)
+    }, generate_visual_output(res, collaborative_alignment, move_report, overall_fitness,
+                              precision, model_generalization, simplicity, dirty=dirty)
 
 
 def align_collaborative_log(cpn, log):
@@ -90,7 +91,7 @@ def align_collaborative_log(cpn, log):
 
 def align_public_logs(cpn, logs, return_t):
     projections = {concept: (log, *deepcopy(cpn)) for concept in return_t[0] for log in logs
-                   if concept in [e.get(config.ATTRIBUTES.org_group) for trace in log for e in trace]}
+                   if concept in [e.get(config.ATTRIBUTES.org) for trace in log for e in trace]}
     move_results = {concept: list() for concept in return_t[0]}
 
     for concept, (log, net, i_m, f_m) in projections.items():
@@ -120,7 +121,8 @@ def align_public_logs(cpn, logs, return_t):
             parameters = {
                 Params.PARAM_MODEL_COST_FUNCTION: model_cost_function,
                 Params.PARAM_SYNC_COST_FUNCTION: sync_cost_function,
-                Params.PARAM_TRACE_COST_FUNCTION: trace_cost_function
+                Params.PARAM_TRACE_COST_FUNCTION: trace_cost_function,
+                Params.ACTIVITY_KEY: config.ATTRIBUTES.event_id
             }
 
             res = alignments.apply(representative_trace, net, i_m, f_m,
@@ -134,11 +136,19 @@ def align_public_logs(cpn, logs, return_t):
             enriched, tau_count = enrich_moves(res["alignment"], representative_traces[variant_key])
             enrichment_results[variant_key] = (enriched, tau_count)
 
+        projection = {
+            "net": net,
+            "initial_marking": i_m,
+            "final_marking": f_m,
+            "model_cost_function": model_cost_function,
+            "sync_cost_function": sync_cost_function,
+            "cost_cache": {}
+        }
         for variant_key, (enriched, tau_count) in enrichment_results.items():
             res, _ = alignments_result[variant_key]
             cases = [((log_id_value, case_trace.attributes[config.ATTRIBUTES.trace_id]), case_trace)
                      for case_trace in trace_variants[variant_key]]
-            report = create_org_conformance_report(enriched, tau_count, res, cases)
+            report = create_org_conformance_report(enriched, tau_count, res, cases, projection)
             move_results[concept].append((variant_key, report))
 
     return move_results
@@ -158,7 +168,7 @@ def enrich_moves(moves, trace):
             comm_point = activity_to_cp.get(model_side)
         elif model_side == SKIP:
             move_type = "LOG"
-            event_org = trace[event_idx].get(config.ATTRIBUTES.org_group)
+            event_org = trace[event_idx].get(config.ATTRIBUTES.org)
             org = {event_org} if event_org is not None else set()
             comm_point = activity_to_cp.get(log_side)
         else:
@@ -194,7 +204,7 @@ def enrich_moves(moves, trace):
     return enriched, tau_transition_count
 
 
-def create_org_conformance_report(enrichment, tau_count, alignment_result, cases):
+def create_org_conformance_report(enrichment, tau_count, alignment_result, cases, projection=None):
     sync_moves, extra_activities = [], []
     for move in enrichment:
         if move['move_type'] == "SYNC":
@@ -213,14 +223,12 @@ def create_org_conformance_report(enrichment, tau_count, alignment_result, cases
         "extra_activities": extra_activities,
         "pattern_frequencies": pattern_frequencies,
         "sync_transition_frequencies": sync_transition_frequencies,
-        "cases": [classify_case_moves(enrichment, composed_id, trace) for composed_id, trace in cases]
+        "cases": [classify_case_moves(enrichment, composed_id, trace, projection) for composed_id, trace in cases]
     }
 
 
-def classify_case_moves(enrichment, composed_id, trace):
+def classify_case_moves(enrichment, composed_id, trace, projection=None):
     enrichment = [dict(move) for move in enrichment]
-    correlated_group = trace_groups.get(uf.find(composed_id), ())
-
     resolved_moves = []
     event_idx = 0
     for move in enrichment:
@@ -240,15 +248,29 @@ def classify_case_moves(enrichment, composed_id, trace):
         if msg_instance_id is not None:
             moves_by_msg_id[msg_instance_id].append((move, move['move_type']))
 
+    displaced_ids = []
+    for msg_instance_id, group in moves_by_msg_id.items():
+        if msg_instance_id not in buddy_events:
+            continue
+        for _, move_type in group:
+            if move_type != "SYNC":
+                displaced_ids.append(msg_instance_id)
+                break
+
+    swap_pairs = []
+    if projection is not None:
+        swap_pairs = find_swap_pairs(trace, displaced_ids, projection)
+
     swap_moves = []
     swapped_ids = set()
-    for msg_instance_id, group in moves_by_msg_id.items():
-        types = {move_type for _, move_type in group}
-        if len(group) > 1 and "LOG" in types and "MODEL" in types:
-            for move, _ in group:
-                move["msgInstanceId"] = msg_instance_id
-                swap_moves.append(move)
-                swapped_ids.add(id(move))
+    for first_id, second_id in swap_pairs:
+        for msg_instance_id, partner_id in ((first_id, second_id), (second_id, first_id)):
+            for move, move_type in moves_by_msg_id[msg_instance_id]:
+                if move_type == "LOG" or move_type == "MODEL":
+                    move["msgInstanceId"] = msg_instance_id
+                    move["swapPartner"] = partner_id
+                    swap_moves.append(move)
+                    swapped_ids.add(id(move))
 
     sender_moves, receiver_moves, async_communications, unknown_moves = [], [], [], []
     for move, msg_instance_id, event in resolved_moves:
@@ -257,7 +279,7 @@ def classify_case_moves(enrichment, composed_id, trace):
         if move['move_type'] in ("LOG", "SYNC"):
             move["msgInstanceId"] = msg_instance_id
             if msg_instance_id in lone_events:
-                if event.get(config.ATTRIBUTES.communication_mode) == "send":
+                if event.get(config.ATTRIBUTES.comm_mode) == "send":
                     sender_moves.append(move)
                 else:
                     receiver_moves.append(move)
@@ -273,10 +295,10 @@ def classify_case_moves(enrichment, composed_id, trace):
                     continue
 
                 order_violated = (
-                        (event.get(config.ATTRIBUTES.communication_mode) == "send"
+                        (event.get(config.ATTRIBUTES.comm_mode) == "send"
                          and event.get(config.ATTRIBUTES.timestamp) > buddy_event.get(config.ATTRIBUTES.timestamp))
                         or
-                        (event.get(config.ATTRIBUTES.communication_mode) == "receive"
+                        (event.get(config.ATTRIBUTES.comm_mode) == "receive"
                          and event.get(config.ATTRIBUTES.timestamp) < buddy_event.get(config.ATTRIBUTES.timestamp))
                 )
                 if order_violated:
@@ -349,7 +371,7 @@ CASE_MOVE_CATEGORIES = {
     "sender_moves": "Sender Move",
     "receiver_moves": "Receiver Move",
     "async_communications": "Asynchronous Communication",
-    "swap_moves": "Swapped Moves",
+    "swap_moves": "Swapped Communication Points",
     "unknown_moves": "Unknown Miscommunications",
 }
 
@@ -368,7 +390,11 @@ def generate_move_report(alignment_report):
             for key, count in variant_report["sync_transition_frequencies"].items():
                 sync_transition_frequencies[key] += count
             for case_report in variant_report["cases"]:
+                for label in describe_swap_pairs(case_report):
+                    correlation_frequencies[("swap_moves", label)] += 1
                 for category in CASE_MOVE_CATEGORIES:
+                    if category == "swap_moves":
+                        continue
                     for move in case_report[category]:
                         activity = move.get("log_activity") or move.get("model_activity")
                         correlation_frequencies[(category, activity)] += 1
@@ -404,12 +430,60 @@ def generate_move_report(alignment_report):
     return report
 
 
+def describe_swap_pairs(case_report):
+    composed_id = case_report["composed_id"]
+    pairs = []
+    for move in case_report["swap_moves"]:
+        pair = tuple(sorted([move["msgInstanceId"], move["swapPartner"]]))
+        if pair not in pairs:
+            pairs.append(pair)
+
+    labels = []
+    for pair in pairs:
+        sides = []
+        for msg_instance_id in pair:
+            own_event = None
+            other_event = None
+            for case_id, event in buddy_events.get(msg_instance_id, ()):
+                if case_id == composed_id and own_event is None:
+                    own_event = event
+                else:
+                    other_event = event
+            if own_event is None:
+                break
+            sides.append((own_event, other_event))
+        if len(sides) != 2:
+            continue
+
+        if sides[0][0].get(config.ATTRIBUTES.event_id) > sides[1][0].get(config.ATTRIBUTES.event_id):
+            sides.reverse()
+        label = (f"{sides[0][0].get(config.ATTRIBUTES.event_id)} ↔ "
+                 f"{sides[1][0].get(config.ATTRIBUTES.event_id)}")
+
+        counterparts = []
+        for _, other_event in sides:
+            if other_event is None or other_event.get(config.ATTRIBUTES.org) is None:
+                break
+            counterparts.append((other_event.get(config.ATTRIBUTES.event_id), other_event.get(config.ATTRIBUTES.org)))
+        if len(counterparts) == 2:
+            if counterparts[0][1] == counterparts[1][1]:
+                activities = sorted([counterparts[0][0], counterparts[1][0]])
+                label += f" (corresponds to {activities[0]} ↔ {activities[1]} at {counterparts[0][1]})"
+            else:
+                label += (f" (corresponds to {counterparts[0][0]} at {counterparts[0][1]} "
+                          f"and {counterparts[1][0]} at {counterparts[1][1]})")
+        labels.append(label)
+
+    return labels
+
+
 def generate_visual_output(alignment_report, _, move_report, overall_fitness, precision, model_generalization,
                            simplicity, dirty=False):
     lines = ["--- \n ## Original Logs " if not dirty else "--- \n ## Dirty Logs ", "### Overall Metrics", "",
              "| Metric | Value |", "|---|---|", f"| Fitness | {overall_fitness:.4f} |",
              f"| Precision | {precision:.4f} |", f"| Generalization | {model_generalization:.4f} |",
-             f"| Simplicity | Size: {simplicity['size']}, Places: {simplicity['places']}, Transitions: {simplicity['transitions']} |",
+             f"| Simplicity | Size: {simplicity['size']}, Places: {simplicity['places']}, "
+             f"Transitions: {simplicity['transitions']} |",
              "", "### Organizational Fitness Values\n | Organization | Fitness | \n |---|---|"]
 
     for concept, org_report in alignment_report.items():
@@ -461,18 +535,13 @@ def get_globals():
     }
 
 
-def prepare_cc_data(net, logs, return_t, existing_trace_groups=None, existing_uf=None):
+def prepare_cc_data(net, logs, return_t):
     global buddy_events, lone_events, transition_to_org_mapping, \
         activity_to_cp, label_to_transition_mapping, trace_groups, uf
 
     concepts, sent_msgs, rec_msgs, async_types, nets = return_t[0], return_t[1], return_t[2], return_t[5], return_t[6]
 
-    if existing_trace_groups:
-        trace_groups = existing_trace_groups
-        uf = existing_uf
-    else:
-        trace_groups, _, uf = group_traces(logs)
-
+    trace_groups, _, uf = group_traces(logs)
     buddy_events, lone_events = classify_miscommunication_type(logs)
     transition_to_org_mapping = build_transition_to_org_mapping(net, nets, concepts)
     activity_to_cp = build_activity_to_communication_point(async_types, sent_msgs, rec_msgs)
@@ -486,6 +555,94 @@ def resolve_model_move_msg_instance(move, trace=None):
     if len(candidates) == 1:
         return candidates[0].get(config.ATTRIBUTES.msg_instance_id), candidates[0]
     return None, None
+
+
+def compute_alignment_cost(events, projection):
+    activity_sequence = tuple(event.get(config.ATTRIBUTES.event_id) for event in events)
+    cost_cache = projection["cost_cache"]
+    if activity_sequence in cost_cache:
+        return cost_cache[activity_sequence]
+
+    parameters = {
+        Params.PARAM_MODEL_COST_FUNCTION: projection["model_cost_function"],
+        Params.PARAM_SYNC_COST_FUNCTION: projection["sync_cost_function"],
+        Params.PARAM_TRACE_COST_FUNCTION: [STD_MODEL_LOG_MOVE_COST] * len(events),
+        Params.ACTIVITY_KEY: config.ATTRIBUTES.event_id
+    }
+    result = alignments.apply(Trace(list(events)), projection["net"], projection["initial_marking"],
+                              projection["final_marking"],
+                              variant=alignments.Variants.VERSION_STATE_EQUATION_A_STAR, parameters=parameters)
+    cost = result["cost"] // STD_MODEL_LOG_MOVE_COST
+    cost_cache[activity_sequence] = cost
+    return cost
+
+
+def swap_events(events, first_id, second_id):
+    pos_1 = None
+    pos_2 = None
+    for pos, event in enumerate(events):
+        msg_instance_id = event.get(config.ATTRIBUTES.msg_instance_id)
+        if msg_instance_id == first_id and pos_1 is None:
+            pos_1 = pos
+        if msg_instance_id == second_id and pos_2 is None:
+            pos_2 = pos
+
+    swapped_events = list(events)
+    swapped_events[pos_1] = events[pos_2]
+    swapped_events[pos_2] = events[pos_1]
+    return swapped_events
+
+
+def find_swap_pairs(trace, displaced_ids, projection):
+    events = list(trace)
+
+    correlated_ids = []
+    for event in events:
+        msg_instance_id = event.get(config.ATTRIBUTES.msg_instance_id)
+        if msg_instance_id in buddy_events:
+            correlated_ids.append(msg_instance_id)
+
+    start_cost = compute_alignment_cost(events, projection)
+
+    to_check = [(events, start_cost, [])]
+    solutions = []
+    while to_check:
+        current_events, current_cost, current_pairs = to_check.pop()
+
+        used_ids = []
+        for first_id, second_id in current_pairs:
+            used_ids.append(first_id)
+            used_ids.append(second_id)
+
+        for first_id in displaced_ids:
+            if first_id in used_ids:
+                continue
+            for second_id in correlated_ids:
+                if second_id == first_id or second_id in used_ids:
+                    continue
+                swapped_events = swap_events(current_events, first_id, second_id)
+                swapped_cost = compute_alignment_cost(swapped_events, projection)
+                if swapped_cost < current_cost:
+                    new_pair = tuple(sorted([first_id, second_id]))
+                    new_pairs = sorted(current_pairs + [new_pair])
+                    solutions.append((new_pairs, swapped_cost))
+                    to_check.append((swapped_events, swapped_cost, new_pairs))
+
+    if not solutions:
+        return []
+
+    lowest_cost = min(cost for pairs, cost in solutions)
+    best_solutions = [pairs for pairs, cost in solutions if cost == lowest_cost]
+    fewest_pairs = min(len(pairs) for pairs in best_solutions)
+
+    distinct_best = []
+    for pairs in best_solutions:
+        if len(pairs) == fewest_pairs and pairs not in distinct_best:
+            distinct_best.append(pairs)
+
+    if len(distinct_best) != 1:
+        return []
+    return distinct_best[0]
 
 
 def classify_miscommunication_type(logs):

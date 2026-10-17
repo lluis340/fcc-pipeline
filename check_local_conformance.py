@@ -7,7 +7,7 @@ from collections import defaultdict
 from copy import deepcopy
 from pm4py.algo.conformance.alignments.petri_net import algorithm as alignments
 from pm4py.algo.conformance.alignments.petri_net.algorithm import Parameters as Params
-from pm4py.objects.petri_net.utils.align_utils import SKIP, STD_MODEL_LOG_MOVE_COST
+from pm4py.objects.petri_net.utils.align_utils import STD_MODEL_LOG_MOVE_COST
 
 activity_to_cp = {}
 uf = None
@@ -35,7 +35,8 @@ def check_local_conformance(private_log, pn):
         parameters = {
             Params.PARAM_MODEL_COST_FUNCTION: model_cost_function,
             Params.PARAM_SYNC_COST_FUNCTION: sync_cost_function,
-            Params.PARAM_TRACE_COST_FUNCTION: [STD_MODEL_LOG_MOVE_COST] * len(traces[0])
+            Params.PARAM_TRACE_COST_FUNCTION: [STD_MODEL_LOG_MOVE_COST] * len(traces[0]),
+            Params.ACTIVITY_KEY: config.ATTRIBUTES.event_id
         }
         local_alignments[variant_key] = alignments.apply(traces[0], net, i_m, f_m,
                                                          variant=alignments.VERSION_STATE_EQUATION_A_STAR,
@@ -63,7 +64,8 @@ def check_local_conformance(private_log, pn):
             parameters = {
                 Params.PARAM_MODEL_COST_FUNCTION: io_model_cost_function,
                 Params.PARAM_SYNC_COST_FUNCTION: io_sync_cost_function,
-                Params.PARAM_TRACE_COST_FUNCTION: [STD_MODEL_LOG_MOVE_COST] * len(traces[0])
+                Params.PARAM_TRACE_COST_FUNCTION: [STD_MODEL_LOG_MOVE_COST] * len(traces[0]),
+                Params.ACTIVITY_KEY: config.ATTRIBUTES.event_id
             }
             alignment = alignments.apply(traces[0], io_net, io_i_m, io_f_m,
                                          variant=alignments.VERSION_STATE_EQUATION_A_STAR,
