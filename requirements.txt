@@ -1,0 +1,4 @@
+
+pm4py>=2.7.9.3
+streamlit>=1.27.0
+lxml
