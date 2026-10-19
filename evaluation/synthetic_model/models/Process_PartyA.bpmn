@@ -1,0 +1,501 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_SupportedElements_PartyA" targetNamespace="http://bpmn.io/schema/bpmn" exporter="generate_supported_collab.py" exporterVersion="1.0">
+  <bpmn:message id="Message_rfq" name="Request for quotation"/>
+  <bpmn:message id="Message_quote" name="Quotation"/>
+  <bpmn:message id="Message_reject" name="Rejection"/>
+  <bpmn:message id="Message_order" name="Order"/>
+  <bpmn:message id="Message_conf" name="Order confirmation"/>
+  <bpmn:message id="Message_invoice" name="Invoice"/>
+  <bpmn:message id="Message_notice" name="Delivery notice"/>
+  <bpmn:message id="Message_pod" name="Proof of delivery"/>
+  <bpmn:message id="Message_damage" name="Damage report"/>
+  <bpmn:message id="Message_advice" name="Payment advice"/>
+  <bpmn:collaboration id="Collaboration_PartyA">
+    <bpmn:participant id="Participant_PartyA" name="PartyA" processRef="Process_PartyA">
+      </bpmn:participant>
+    <bpmn:participant id="Participant_PartyB" name="PartyB"/>
+    <bpmn:participant id="Participant_PartyC" name="PartyC"/>
+    <bpmn:messageFlow id="MF_rfq" name="Request for quotation" sourceRef="A_send_rfq" targetRef="Participant_PartyB" messageRef="Message_rfq"/>
+    <bpmn:messageFlow id="MF_quote" name="Quotation" sourceRef="Participant_PartyB" targetRef="A_recv_quote" messageRef="Message_quote"/>
+    <bpmn:messageFlow id="MF_reject" name="Rejection" sourceRef="A_send_reject" targetRef="Participant_PartyB" messageRef="Message_reject"/>
+    <bpmn:messageFlow id="MF_order" name="Order" sourceRef="A_send_order" targetRef="Participant_PartyB" messageRef="Message_order"/>
+    <bpmn:messageFlow id="MF_conf" name="Order confirmation" sourceRef="Participant_PartyB" targetRef="A_recv_conf" messageRef="Message_conf"/>
+    <bpmn:messageFlow id="MF_invoice" name="Invoice" sourceRef="Participant_PartyB" targetRef="A_recv_invoice" messageRef="Message_invoice"/>
+    <bpmn:messageFlow id="MF_notice" name="Delivery notice" sourceRef="Participant_PartyC" targetRef="A_catch_delivery" messageRef="Message_notice"/>
+    <bpmn:messageFlow id="MF_pod" name="Proof of delivery" sourceRef="A_send_pod" targetRef="Participant_PartyC" messageRef="Message_pod"/>
+    <bpmn:messageFlow id="MF_damage" name="Damage report" sourceRef="A_send_damage" targetRef="Participant_PartyC" messageRef="Message_damage"/>
+    <bpmn:messageFlow id="MF_advice" name="Payment advice" sourceRef="A_end_msg" targetRef="Participant_PartyB" messageRef="Message_advice"/>
+  </bpmn:collaboration>
+  <bpmn:process id="Process_PartyA" name="PartyA" isExecutable="false">
+    <bpmn:startEvent id="A_start" name="Replenishment needed">
+      <bpmn:outgoing>Flow_A_start__A_create_req</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:task id="A_create_req" name="Create purchase requisition">
+      <bpmn:incoming>Flow_A_start__A_create_req</bpmn:incoming>
+      <bpmn:outgoing>Flow_A_create_req__A_approve_req</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="A_approve_req" name="Approve requisition">
+      <bpmn:incoming>Flow_A_create_req__A_approve_req</bpmn:incoming>
+      <bpmn:outgoing>Flow_A_approve_req__A_gw_escal</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="A_gw_escal" name="Approval overdue?" default="Flow_A_gw_escal__A_gw_merge_appr">
+      <bpmn:incoming>Flow_A_approve_req__A_gw_escal</bpmn:incoming>
+      <bpmn:outgoing>Flow_A_gw_escal__A_gw_merge_appr</bpmn:outgoing>
+      <bpmn:outgoing>Flow_A_gw_escal__A_escalate</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="A_escalate" name="Escalate to head of purchasing">
+      <bpmn:incoming>Flow_A_gw_escal__A_escalate</bpmn:incoming>
+      <bpmn:outgoing>Flow_A_escalate__A_gw_merge_appr</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="A_gw_merge_appr">
+      <bpmn:incoming>Flow_A_gw_escal__A_gw_merge_appr</bpmn:incoming>
+      <bpmn:incoming>Flow_A_escalate__A_gw_merge_appr</bpmn:incoming>
+      <bpmn:outgoing>Flow_A_gw_merge_appr__A_send_rfq</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sendTask id="A_send_rfq" name="Send request for quotation" messageRef="Message_rfq">
+      <bpmn:incoming>Flow_A_gw_merge_appr__A_send_rfq</bpmn:incoming>
+      <bpmn:outgoing>Flow_A_send_rfq__A_recv_quote</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:receiveTask id="A_recv_quote" name="Receive quotation" messageRef="Message_quote" instantiate="false">
+      <bpmn:incoming>Flow_A_send_rfq__A_recv_quote</bpmn:incoming>
+      <bpmn:outgoing>Flow_A_recv_quote__A_gw_accept</bpmn:outgoing>
+    </bpmn:receiveTask>
+    <bpmn:exclusiveGateway id="A_gw_accept" name="Quotation acceptable?" default="Flow_A_gw_accept__A_send_reject">
+      <bpmn:incoming>Flow_A_recv_quote__A_gw_accept</bpmn:incoming>
+      <bpmn:outgoing>Flow_A_gw_accept__A_send_order</bpmn:outgoing>
+      <bpmn:outgoing>Flow_A_gw_accept__A_send_reject</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sendTask id="A_send_order" name="Place order" messageRef="Message_order">
+      <bpmn:incoming>Flow_A_gw_accept__A_send_order</bpmn:incoming>
+      <bpmn:outgoing>Flow_A_send_order__A_sig_throw</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:sendTask id="A_send_reject" name="Send rejection" messageRef="Message_reject">
+      <bpmn:incoming>Flow_A_gw_accept__A_send_reject</bpmn:incoming>
+      <bpmn:outgoing>Flow_A_send_reject__A_end_cancel</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:task id="A_sig_throw" name="Announce incoming goods">
+      <bpmn:incoming>Flow_A_send_order__A_sig_throw</bpmn:incoming>
+      <bpmn:outgoing>Flow_A_sig_throw__A_recv_conf</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="A_end_cancel" name="Procurement cancelled">
+      <bpmn:incoming>Flow_A_send_reject__A_end_cancel</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:receiveTask id="A_recv_conf" name="Receive order confirmation" messageRef="Message_conf" instantiate="false">
+      <bpmn:incoming>Flow_A_sig_throw__A_recv_conf</bpmn:incoming>
+      <bpmn:outgoing>Flow_A_recv_conf__A_catch_delivery</bpmn:outgoing>
+    </bpmn:receiveTask>
+    <bpmn:intermediateCatchEvent id="A_catch_delivery" name="Delivery notice received">
+      <bpmn:incoming>Flow_A_recv_conf__A_catch_delivery</bpmn:incoming>
+      <bpmn:outgoing>Flow_A_catch_delivery__A_par_split</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="A_catch_delivery_def" messageRef="Message_notice"/>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:parallelGateway id="A_par_split">
+      <bpmn:incoming>Flow_A_catch_delivery__A_par_split</bpmn:incoming>
+      <bpmn:outgoing>Flow_A_par_split__A_gw_insp_merge</bpmn:outgoing>
+      <bpmn:outgoing>Flow_A_par_split__A_book_gr</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:exclusiveGateway id="A_gw_insp_merge">
+      <bpmn:incoming>Flow_A_par_split__A_gw_insp_merge</bpmn:incoming>
+      <bpmn:incoming>Flow_A_gw_insp_more__A_gw_insp_merge</bpmn:incoming>
+      <bpmn:outgoing>Flow_A_gw_insp_merge__A_inspect</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="A_inspect" name="Inspect pallet">
+      <bpmn:incoming>Flow_A_gw_insp_merge__A_inspect</bpmn:incoming>
+      <bpmn:outgoing>Flow_A_inspect__A_gw_insp_more</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="A_gw_insp_more" name="More pallets to inspect?" default="Flow_A_gw_insp_more__A_par_join">
+      <bpmn:incoming>Flow_A_inspect__A_gw_insp_more</bpmn:incoming>
+      <bpmn:outgoing>Flow_A_gw_insp_more__A_par_join</bpmn:outgoing>
+      <bpmn:outgoing>Flow_A_gw_insp_more__A_gw_insp_merge</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="A_book_gr" name="Book goods receipt">
+      <bpmn:incoming>Flow_A_par_split__A_book_gr</bpmn:incoming>
+      <bpmn:outgoing>Flow_A_book_gr__A_par_join</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:parallelGateway id="A_par_join">
+      <bpmn:incoming>Flow_A_gw_insp_more__A_par_join</bpmn:incoming>
+      <bpmn:incoming>Flow_A_book_gr__A_par_join</bpmn:incoming>
+      <bpmn:outgoing>Flow_A_par_join__A_gw_ok</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:exclusiveGateway id="A_gw_ok" name="Goods in order?" default="Flow_A_gw_ok__A_send_damage">
+      <bpmn:incoming>Flow_A_par_join__A_gw_ok</bpmn:incoming>
+      <bpmn:outgoing>Flow_A_gw_ok__A_send_pod</bpmn:outgoing>
+      <bpmn:outgoing>Flow_A_gw_ok__A_send_damage</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sendTask id="A_send_pod" name="Send proof of delivery" messageRef="Message_pod">
+      <bpmn:incoming>Flow_A_gw_ok__A_send_pod</bpmn:incoming>
+      <bpmn:outgoing>Flow_A_send_pod__A_gw_merge_ok</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:sendTask id="A_send_damage" name="Send damage report" messageRef="Message_damage">
+      <bpmn:incoming>Flow_A_gw_ok__A_send_damage</bpmn:incoming>
+      <bpmn:outgoing>Flow_A_send_damage__A_gw_merge_ok</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:exclusiveGateway id="A_gw_merge_ok">
+      <bpmn:incoming>Flow_A_send_pod__A_gw_merge_ok</bpmn:incoming>
+      <bpmn:incoming>Flow_A_send_damage__A_gw_merge_ok</bpmn:incoming>
+      <bpmn:outgoing>Flow_A_gw_merge_ok__A_recv_invoice</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:receiveTask id="A_recv_invoice" name="Receive invoice" messageRef="Message_invoice" instantiate="false">
+      <bpmn:incoming>Flow_A_gw_merge_ok__A_recv_invoice</bpmn:incoming>
+      <bpmn:outgoing>Flow_A_recv_invoice__A_pay</bpmn:outgoing>
+    </bpmn:receiveTask>
+    <bpmn:task id="A_pay" name="Execute payment">
+      <bpmn:incoming>Flow_A_recv_invoice__A_pay</bpmn:incoming>
+      <bpmn:outgoing>Flow_A_pay__A_gw_payfail</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="A_gw_payfail" name="Payment failed?" default="Flow_A_gw_payfail__A_gw_merge_pay">
+      <bpmn:incoming>Flow_A_pay__A_gw_payfail</bpmn:incoming>
+      <bpmn:outgoing>Flow_A_gw_payfail__A_gw_merge_pay</bpmn:outgoing>
+      <bpmn:outgoing>Flow_A_gw_payfail__A_pay_manual</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="A_pay_manual" name="Pay manually">
+      <bpmn:incoming>Flow_A_gw_payfail__A_pay_manual</bpmn:incoming>
+      <bpmn:outgoing>Flow_A_pay_manual__A_gw_merge_pay</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="A_gw_merge_pay">
+      <bpmn:incoming>Flow_A_gw_payfail__A_gw_merge_pay</bpmn:incoming>
+      <bpmn:incoming>Flow_A_pay_manual__A_gw_merge_pay</bpmn:incoming>
+      <bpmn:outgoing>Flow_A_gw_merge_pay__A_end_msg</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:endEvent id="A_end_msg" name="Payment advice sent">
+      <bpmn:incoming>Flow_A_gw_merge_pay__A_end_msg</bpmn:incoming>
+      <bpmn:messageEventDefinition id="A_end_msg_def" messageRef="Message_advice"/>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_A_start__A_create_req" sourceRef="A_start" targetRef="A_create_req"/>
+    <bpmn:sequenceFlow id="Flow_A_create_req__A_approve_req" sourceRef="A_create_req" targetRef="A_approve_req"/>
+    <bpmn:sequenceFlow id="Flow_A_approve_req__A_gw_escal" sourceRef="A_approve_req" targetRef="A_gw_escal"/>
+    <bpmn:sequenceFlow id="Flow_A_gw_escal__A_gw_merge_appr" sourceRef="A_gw_escal" targetRef="A_gw_merge_appr" name="no"/>
+    <bpmn:sequenceFlow id="Flow_A_gw_escal__A_escalate" sourceRef="A_gw_escal" targetRef="A_escalate" name="yes"/>
+    <bpmn:sequenceFlow id="Flow_A_escalate__A_gw_merge_appr" sourceRef="A_escalate" targetRef="A_gw_merge_appr"/>
+    <bpmn:sequenceFlow id="Flow_A_gw_merge_appr__A_send_rfq" sourceRef="A_gw_merge_appr" targetRef="A_send_rfq"/>
+    <bpmn:sequenceFlow id="Flow_A_send_rfq__A_recv_quote" sourceRef="A_send_rfq" targetRef="A_recv_quote"/>
+    <bpmn:sequenceFlow id="Flow_A_recv_quote__A_gw_accept" sourceRef="A_recv_quote" targetRef="A_gw_accept"/>
+    <bpmn:sequenceFlow id="Flow_A_gw_accept__A_send_order" sourceRef="A_gw_accept" targetRef="A_send_order" name="yes"/>
+    <bpmn:sequenceFlow id="Flow_A_gw_accept__A_send_reject" sourceRef="A_gw_accept" targetRef="A_send_reject" name="no"/>
+    <bpmn:sequenceFlow id="Flow_A_send_order__A_sig_throw" sourceRef="A_send_order" targetRef="A_sig_throw"/>
+    <bpmn:sequenceFlow id="Flow_A_sig_throw__A_recv_conf" sourceRef="A_sig_throw" targetRef="A_recv_conf"/>
+    <bpmn:sequenceFlow id="Flow_A_send_reject__A_end_cancel" sourceRef="A_send_reject" targetRef="A_end_cancel"/>
+    <bpmn:sequenceFlow id="Flow_A_recv_conf__A_catch_delivery" sourceRef="A_recv_conf" targetRef="A_catch_delivery"/>
+    <bpmn:sequenceFlow id="Flow_A_catch_delivery__A_par_split" sourceRef="A_catch_delivery" targetRef="A_par_split"/>
+    <bpmn:sequenceFlow id="Flow_A_par_split__A_gw_insp_merge" sourceRef="A_par_split" targetRef="A_gw_insp_merge"/>
+    <bpmn:sequenceFlow id="Flow_A_gw_insp_merge__A_inspect" sourceRef="A_gw_insp_merge" targetRef="A_inspect"/>
+    <bpmn:sequenceFlow id="Flow_A_inspect__A_gw_insp_more" sourceRef="A_inspect" targetRef="A_gw_insp_more"/>
+    <bpmn:sequenceFlow id="Flow_A_gw_insp_more__A_par_join" sourceRef="A_gw_insp_more" targetRef="A_par_join" name="no"/>
+    <bpmn:sequenceFlow id="Flow_A_gw_insp_more__A_gw_insp_merge" sourceRef="A_gw_insp_more" targetRef="A_gw_insp_merge" name="yes"/>
+    <bpmn:sequenceFlow id="Flow_A_par_split__A_book_gr" sourceRef="A_par_split" targetRef="A_book_gr"/>
+    <bpmn:sequenceFlow id="Flow_A_book_gr__A_par_join" sourceRef="A_book_gr" targetRef="A_par_join"/>
+    <bpmn:sequenceFlow id="Flow_A_par_join__A_gw_ok" sourceRef="A_par_join" targetRef="A_gw_ok"/>
+    <bpmn:sequenceFlow id="Flow_A_gw_ok__A_send_pod" sourceRef="A_gw_ok" targetRef="A_send_pod" name="yes"/>
+    <bpmn:sequenceFlow id="Flow_A_gw_ok__A_send_damage" sourceRef="A_gw_ok" targetRef="A_send_damage" name="no"/>
+    <bpmn:sequenceFlow id="Flow_A_send_pod__A_gw_merge_ok" sourceRef="A_send_pod" targetRef="A_gw_merge_ok"/>
+    <bpmn:sequenceFlow id="Flow_A_send_damage__A_gw_merge_ok" sourceRef="A_send_damage" targetRef="A_gw_merge_ok"/>
+    <bpmn:sequenceFlow id="Flow_A_gw_merge_ok__A_recv_invoice" sourceRef="A_gw_merge_ok" targetRef="A_recv_invoice"/>
+    <bpmn:sequenceFlow id="Flow_A_recv_invoice__A_pay" sourceRef="A_recv_invoice" targetRef="A_pay"/>
+    <bpmn:sequenceFlow id="Flow_A_pay__A_gw_payfail" sourceRef="A_pay" targetRef="A_gw_payfail"/>
+    <bpmn:sequenceFlow id="Flow_A_gw_payfail__A_gw_merge_pay" sourceRef="A_gw_payfail" targetRef="A_gw_merge_pay" name="no"/>
+    <bpmn:sequenceFlow id="Flow_A_gw_payfail__A_pay_manual" sourceRef="A_gw_payfail" targetRef="A_pay_manual" name="yes"/>
+    <bpmn:sequenceFlow id="Flow_A_pay_manual__A_gw_merge_pay" sourceRef="A_pay_manual" targetRef="A_gw_merge_pay"/>
+    <bpmn:sequenceFlow id="Flow_A_gw_merge_pay__A_end_msg" sourceRef="A_gw_merge_pay" targetRef="A_end_msg"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collaboration_PartyA">
+      <bpmndi:BPMNShape id="Participant_PartyA_di" bpmnElement="Participant_PartyA" isHorizontal="true">
+        <dc:Bounds x="100" y="40" width="8780" height="360"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Participant_PartyB_di" bpmnElement="Participant_PartyB" isHorizontal="true">
+        <dc:Bounds x="100" y="445.0" width="8780" height="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Participant_PartyC_di" bpmnElement="Participant_PartyC" isHorizontal="true">
+        <dc:Bounds x="100" y="525.0" width="8780" height="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="A_start_di" bpmnElement="A_start">
+        <dc:Bounds x="232.0" y="202.0" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="A_create_req_di" bpmnElement="A_create_req">
+        <dc:Bounds x="340.0" y="180.0" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="A_approve_req_di" bpmnElement="A_approve_req">
+        <dc:Bounds x="480.0" y="180.0" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="A_gw_escal_di" bpmnElement="A_gw_escal" isMarkerVisible="true">
+        <dc:Bounds x="645.0" y="195.0" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="A_escalate_di" bpmnElement="A_escalate">
+        <dc:Bounds x="760.0" y="300.0" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="A_gw_merge_appr_di" bpmnElement="A_gw_merge_appr" isMarkerVisible="true">
+        <dc:Bounds x="925.0" y="195.0" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="A_send_rfq_di" bpmnElement="A_send_rfq">
+        <dc:Bounds x="1040.0" y="180.0" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="A_recv_quote_di" bpmnElement="A_recv_quote">
+        <dc:Bounds x="1740.0" y="180.0" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="A_gw_accept_di" bpmnElement="A_gw_accept" isMarkerVisible="true">
+        <dc:Bounds x="1905.0" y="195.0" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="A_send_order_di" bpmnElement="A_send_order">
+        <dc:Bounds x="2020.0" y="180.0" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="A_send_reject_di" bpmnElement="A_send_reject">
+        <dc:Bounds x="2020.0" y="300.0" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="A_sig_throw_di" bpmnElement="A_sig_throw">
+        <dc:Bounds x="2160.0" y="180.0" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="A_end_cancel_di" bpmnElement="A_end_cancel">
+        <dc:Bounds x="2192.0" y="322.0" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="A_recv_conf_di" bpmnElement="A_recv_conf">
+        <dc:Bounds x="2580.0" y="180.0" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="A_catch_delivery_di" bpmnElement="A_catch_delivery">
+        <dc:Bounds x="5552.0" y="202.0" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="A_par_split_di" bpmnElement="A_par_split">
+        <dc:Bounds x="5685.0" y="195.0" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="A_gw_insp_merge_di" bpmnElement="A_gw_insp_merge" isMarkerVisible="true">
+        <dc:Bounds x="5825.0" y="75.0" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="A_inspect_di" bpmnElement="A_inspect">
+        <dc:Bounds x="5940.0" y="60.0" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="A_gw_insp_more_di" bpmnElement="A_gw_insp_more" isMarkerVisible="true">
+        <dc:Bounds x="6105.0" y="75.0" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="A_book_gr_di" bpmnElement="A_book_gr">
+        <dc:Bounds x="5940.0" y="300.0" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="A_par_join_di" bpmnElement="A_par_join">
+        <dc:Bounds x="6245.0" y="195.0" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="A_gw_ok_di" bpmnElement="A_gw_ok" isMarkerVisible="true">
+        <dc:Bounds x="6385.0" y="195.0" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="A_send_pod_di" bpmnElement="A_send_pod">
+        <dc:Bounds x="6500.0" y="60.0" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="A_send_damage_di" bpmnElement="A_send_damage">
+        <dc:Bounds x="6640.0" y="300.0" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="A_gw_merge_ok_di" bpmnElement="A_gw_merge_ok" isMarkerVisible="true">
+        <dc:Bounds x="6805.0" y="195.0" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="A_recv_invoice_di" bpmnElement="A_recv_invoice">
+        <dc:Bounds x="6920.0" y="180.0" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="A_pay_di" bpmnElement="A_pay">
+        <dc:Bounds x="7060.0" y="180.0" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="A_gw_payfail_di" bpmnElement="A_gw_payfail" isMarkerVisible="true">
+        <dc:Bounds x="7225.0" y="195.0" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="A_pay_manual_di" bpmnElement="A_pay_manual">
+        <dc:Bounds x="7340.0" y="300.0" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="A_gw_merge_pay_di" bpmnElement="A_gw_merge_pay" isMarkerVisible="true">
+        <dc:Bounds x="7505.0" y="195.0" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="A_end_msg_di" bpmnElement="A_end_msg">
+        <dc:Bounds x="7652.0" y="202.0" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_A_start__A_create_req_di" bpmnElement="Flow_A_start__A_create_req">
+        <di:waypoint x="268.0" y="220.0"/>
+        <di:waypoint x="340.0" y="220.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_A_create_req__A_approve_req_di" bpmnElement="Flow_A_create_req__A_approve_req">
+        <di:waypoint x="440.0" y="220.0"/>
+        <di:waypoint x="480.0" y="220.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_A_approve_req__A_gw_escal_di" bpmnElement="Flow_A_approve_req__A_gw_escal">
+        <di:waypoint x="580.0" y="220.0"/>
+        <di:waypoint x="645.0" y="220.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_A_gw_escal__A_gw_merge_appr_di" bpmnElement="Flow_A_gw_escal__A_gw_merge_appr">
+        <di:waypoint x="695.0" y="220.0"/>
+        <di:waypoint x="925.0" y="220.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_A_gw_escal__A_escalate_di" bpmnElement="Flow_A_gw_escal__A_escalate">
+        <di:waypoint x="670.0" y="245.0"/>
+        <di:waypoint x="670.0" y="340.0"/>
+        <di:waypoint x="760.0" y="340.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_A_escalate__A_gw_merge_appr_di" bpmnElement="Flow_A_escalate__A_gw_merge_appr">
+        <di:waypoint x="860.0" y="340.0"/>
+        <di:waypoint x="950.0" y="340.0"/>
+        <di:waypoint x="950.0" y="245.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_A_gw_merge_appr__A_send_rfq_di" bpmnElement="Flow_A_gw_merge_appr__A_send_rfq">
+        <di:waypoint x="975.0" y="220.0"/>
+        <di:waypoint x="1040.0" y="220.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_A_send_rfq__A_recv_quote_di" bpmnElement="Flow_A_send_rfq__A_recv_quote">
+        <di:waypoint x="1140.0" y="220.0"/>
+        <di:waypoint x="1740.0" y="220.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_A_recv_quote__A_gw_accept_di" bpmnElement="Flow_A_recv_quote__A_gw_accept">
+        <di:waypoint x="1840.0" y="220.0"/>
+        <di:waypoint x="1905.0" y="220.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_A_gw_accept__A_send_order_di" bpmnElement="Flow_A_gw_accept__A_send_order">
+        <di:waypoint x="1955.0" y="220.0"/>
+        <di:waypoint x="2020.0" y="220.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_A_gw_accept__A_send_reject_di" bpmnElement="Flow_A_gw_accept__A_send_reject">
+        <di:waypoint x="1930.0" y="245.0"/>
+        <di:waypoint x="1930.0" y="340.0"/>
+        <di:waypoint x="2020.0" y="340.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_A_send_order__A_sig_throw_di" bpmnElement="Flow_A_send_order__A_sig_throw">
+        <di:waypoint x="2120.0" y="220.0"/>
+        <di:waypoint x="2160.0" y="220.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_A_sig_throw__A_recv_conf_di" bpmnElement="Flow_A_sig_throw__A_recv_conf">
+        <di:waypoint x="2260.0" y="220.0"/>
+        <di:waypoint x="2580.0" y="220.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_A_send_reject__A_end_cancel_di" bpmnElement="Flow_A_send_reject__A_end_cancel">
+        <di:waypoint x="2120.0" y="340.0"/>
+        <di:waypoint x="2192.0" y="340.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_A_recv_conf__A_catch_delivery_di" bpmnElement="Flow_A_recv_conf__A_catch_delivery">
+        <di:waypoint x="2680.0" y="220.0"/>
+        <di:waypoint x="5552.0" y="220.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_A_catch_delivery__A_par_split_di" bpmnElement="Flow_A_catch_delivery__A_par_split">
+        <di:waypoint x="5588.0" y="220.0"/>
+        <di:waypoint x="5685.0" y="220.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_A_par_split__A_gw_insp_merge_di" bpmnElement="Flow_A_par_split__A_gw_insp_merge">
+        <di:waypoint x="5710.0" y="195.0"/>
+        <di:waypoint x="5710.0" y="100.0"/>
+        <di:waypoint x="5825.0" y="100.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_A_gw_insp_merge__A_inspect_di" bpmnElement="Flow_A_gw_insp_merge__A_inspect">
+        <di:waypoint x="5875.0" y="100.0"/>
+        <di:waypoint x="5940.0" y="100.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_A_inspect__A_gw_insp_more_di" bpmnElement="Flow_A_inspect__A_gw_insp_more">
+        <di:waypoint x="6040.0" y="100.0"/>
+        <di:waypoint x="6105.0" y="100.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_A_gw_insp_more__A_par_join_di" bpmnElement="Flow_A_gw_insp_more__A_par_join">
+        <di:waypoint x="6155.0" y="100.0"/>
+        <di:waypoint x="6270.0" y="100.0"/>
+        <di:waypoint x="6270.0" y="195.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_A_gw_insp_more__A_gw_insp_merge_di" bpmnElement="Flow_A_gw_insp_more__A_gw_insp_merge">
+        <di:waypoint x="6130.0" y="75.0"/>
+        <di:waypoint x="6130.0" y="55.0"/>
+        <di:waypoint x="5850.0" y="55.0"/>
+        <di:waypoint x="5850.0" y="75.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_A_par_split__A_book_gr_di" bpmnElement="Flow_A_par_split__A_book_gr">
+        <di:waypoint x="5710.0" y="245.0"/>
+        <di:waypoint x="5710.0" y="340.0"/>
+        <di:waypoint x="5940.0" y="340.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_A_book_gr__A_par_join_di" bpmnElement="Flow_A_book_gr__A_par_join">
+        <di:waypoint x="6040.0" y="340.0"/>
+        <di:waypoint x="6270.0" y="340.0"/>
+        <di:waypoint x="6270.0" y="245.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_A_par_join__A_gw_ok_di" bpmnElement="Flow_A_par_join__A_gw_ok">
+        <di:waypoint x="6295.0" y="220.0"/>
+        <di:waypoint x="6385.0" y="220.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_A_gw_ok__A_send_pod_di" bpmnElement="Flow_A_gw_ok__A_send_pod">
+        <di:waypoint x="6410.0" y="195.0"/>
+        <di:waypoint x="6410.0" y="100.0"/>
+        <di:waypoint x="6500.0" y="100.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_A_gw_ok__A_send_damage_di" bpmnElement="Flow_A_gw_ok__A_send_damage">
+        <di:waypoint x="6410.0" y="245.0"/>
+        <di:waypoint x="6410.0" y="340.0"/>
+        <di:waypoint x="6640.0" y="340.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_A_send_pod__A_gw_merge_ok_di" bpmnElement="Flow_A_send_pod__A_gw_merge_ok">
+        <di:waypoint x="6600.0" y="100.0"/>
+        <di:waypoint x="6830.0" y="100.0"/>
+        <di:waypoint x="6830.0" y="195.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_A_send_damage__A_gw_merge_ok_di" bpmnElement="Flow_A_send_damage__A_gw_merge_ok">
+        <di:waypoint x="6740.0" y="340.0"/>
+        <di:waypoint x="6830.0" y="340.0"/>
+        <di:waypoint x="6830.0" y="245.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_A_gw_merge_ok__A_recv_invoice_di" bpmnElement="Flow_A_gw_merge_ok__A_recv_invoice">
+        <di:waypoint x="6855.0" y="220.0"/>
+        <di:waypoint x="6920.0" y="220.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_A_recv_invoice__A_pay_di" bpmnElement="Flow_A_recv_invoice__A_pay">
+        <di:waypoint x="7020.0" y="220.0"/>
+        <di:waypoint x="7060.0" y="220.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_A_pay__A_gw_payfail_di" bpmnElement="Flow_A_pay__A_gw_payfail">
+        <di:waypoint x="7160.0" y="220.0"/>
+        <di:waypoint x="7225.0" y="220.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_A_gw_payfail__A_gw_merge_pay_di" bpmnElement="Flow_A_gw_payfail__A_gw_merge_pay">
+        <di:waypoint x="7275.0" y="220.0"/>
+        <di:waypoint x="7505.0" y="220.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_A_gw_payfail__A_pay_manual_di" bpmnElement="Flow_A_gw_payfail__A_pay_manual">
+        <di:waypoint x="7250.0" y="245.0"/>
+        <di:waypoint x="7250.0" y="340.0"/>
+        <di:waypoint x="7340.0" y="340.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_A_pay_manual__A_gw_merge_pay_di" bpmnElement="Flow_A_pay_manual__A_gw_merge_pay">
+        <di:waypoint x="7440.0" y="340.0"/>
+        <di:waypoint x="7530.0" y="340.0"/>
+        <di:waypoint x="7530.0" y="245.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_A_gw_merge_pay__A_end_msg_di" bpmnElement="Flow_A_gw_merge_pay__A_end_msg">
+        <di:waypoint x="7555.0" y="220.0"/>
+        <di:waypoint x="7652.0" y="220.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_rfq_di" bpmnElement="MF_rfq">
+        <di:waypoint x="1090.0" y="260.0"/>
+        <di:waypoint x="1090.0" y="445.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_quote_di" bpmnElement="MF_quote">
+        <di:waypoint x="1790.0" y="445.0"/>
+        <di:waypoint x="1790.0" y="260.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_reject_di" bpmnElement="MF_reject">
+        <di:waypoint x="2070.0" y="380.0"/>
+        <di:waypoint x="2070.0" y="445.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_order_di" bpmnElement="MF_order">
+        <di:waypoint x="2070.0" y="260.0"/>
+        <di:waypoint x="2070.0" y="445.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_conf_di" bpmnElement="MF_conf">
+        <di:waypoint x="2630.0" y="445.0"/>
+        <di:waypoint x="2630.0" y="260.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_invoice_di" bpmnElement="MF_invoice">
+        <di:waypoint x="6970.0" y="445.0"/>
+        <di:waypoint x="6970.0" y="260.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_notice_di" bpmnElement="MF_notice">
+        <di:waypoint x="5570.0" y="525.0"/>
+        <di:waypoint x="5570.0" y="238.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_pod_di" bpmnElement="MF_pod">
+        <di:waypoint x="6550.0" y="140.0"/>
+        <di:waypoint x="6550.0" y="525.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_damage_di" bpmnElement="MF_damage">
+        <di:waypoint x="6690.0" y="380.0"/>
+        <di:waypoint x="6690.0" y="525.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_advice_di" bpmnElement="MF_advice">
+        <di:waypoint x="7670.0" y="238.0"/>
+        <di:waypoint x="7670.0" y="445.0"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

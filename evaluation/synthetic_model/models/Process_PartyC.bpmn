@@ -1,0 +1,386 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_SupportedElements_PartyC" targetNamespace="http://bpmn.io/schema/bpmn" exporter="generate_supported_collab.py" exporterVersion="1.0">
+  <bpmn:message id="Message_transport" name="Transport order"/>
+  <bpmn:message id="Message_ready" name="Pickup readiness"/>
+  <bpmn:message id="Message_pickup" name="Pickup confirmation"/>
+  <bpmn:message id="Message_notice" name="Delivery notice"/>
+  <bpmn:message id="Message_pod" name="Proof of delivery"/>
+  <bpmn:message id="Message_damage" name="Damage report"/>
+  <bpmn:message id="Message_finv" name="Freight invoice"/>
+  <bpmn:message id="Message_fpay" name="Freight payment"/>
+  <bpmn:collaboration id="Collaboration_PartyC">
+    <bpmn:participant id="Participant_PartyC" name="PartyC" processRef="Process_PartyC">
+      </bpmn:participant>
+    <bpmn:participant id="Participant_PartyA" name="PartyA"/>
+    <bpmn:participant id="Participant_PartyB" name="PartyB"/>
+    <bpmn:messageFlow id="MF_transport" name="Transport order" sourceRef="Participant_PartyB" targetRef="C_start_msg" messageRef="Message_transport"/>
+    <bpmn:messageFlow id="MF_ready" name="Pickup readiness" sourceRef="Participant_PartyB" targetRef="C_catch_ready" messageRef="Message_ready"/>
+    <bpmn:messageFlow id="MF_pickup" name="Pickup confirmation" sourceRef="C_send_pickup" targetRef="Participant_PartyB" messageRef="Message_pickup"/>
+    <bpmn:messageFlow id="MF_notice" name="Delivery notice" sourceRef="C_throw_notice" targetRef="Participant_PartyA" messageRef="Message_notice"/>
+    <bpmn:messageFlow id="MF_pod" name="Proof of delivery" sourceRef="Participant_PartyA" targetRef="C_catch_pod" messageRef="Message_pod"/>
+    <bpmn:messageFlow id="MF_damage" name="Damage report" sourceRef="Participant_PartyA" targetRef="C_catch_damage" messageRef="Message_damage"/>
+    <bpmn:messageFlow id="MF_finv" name="Freight invoice" sourceRef="C_send_finv" targetRef="Participant_PartyB" messageRef="Message_finv"/>
+    <bpmn:messageFlow id="MF_fpay" name="Freight payment" sourceRef="Participant_PartyB" targetRef="C_catch_fpay" messageRef="Message_fpay"/>
+  </bpmn:collaboration>
+  <bpmn:process id="Process_PartyC" name="PartyC" isExecutable="false">
+    <bpmn:startEvent id="C_start_msg" name="Transport order received">
+      <bpmn:outgoing>Flow_C_start_msg__C_wait_slot</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="C_start_msg_def" messageRef="Message_transport"/>
+    </bpmn:startEvent>
+    <bpmn:task id="C_wait_slot" name="Wait for pickup slot">
+      <bpmn:incoming>Flow_C_start_msg__C_wait_slot</bpmn:incoming>
+      <bpmn:outgoing>Flow_C_wait_slot__C_wait_truck</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="C_wait_truck" name="Wait for available truck">
+      <bpmn:incoming>Flow_C_wait_slot__C_wait_truck</bpmn:incoming>
+      <bpmn:outgoing>Flow_C_wait_truck__C_catch_ready</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:intermediateCatchEvent id="C_catch_ready" name="Goods ready for pickup">
+      <bpmn:incoming>Flow_C_wait_truck__C_catch_ready</bpmn:incoming>
+      <bpmn:outgoing>Flow_C_catch_ready__C_pickup</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="C_catch_ready_def" messageRef="Message_ready"/>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:task id="C_pickup" name="Pick up goods">
+      <bpmn:incoming>Flow_C_catch_ready__C_pickup</bpmn:incoming>
+      <bpmn:outgoing>Flow_C_pickup__C_gw_road</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="C_gw_road" name="Road closed?" default="Flow_C_gw_road__C_gw_merge_pick">
+      <bpmn:incoming>Flow_C_pickup__C_gw_road</bpmn:incoming>
+      <bpmn:outgoing>Flow_C_gw_road__C_gw_merge_pick</bpmn:outgoing>
+      <bpmn:outgoing>Flow_C_gw_road__C_reroute</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="C_reroute" name="Reroute">
+      <bpmn:incoming>Flow_C_gw_road__C_reroute</bpmn:incoming>
+      <bpmn:outgoing>Flow_C_reroute__C_gw_merge_pick</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="C_gw_merge_pick">
+      <bpmn:incoming>Flow_C_gw_road__C_gw_merge_pick</bpmn:incoming>
+      <bpmn:incoming>Flow_C_reroute__C_gw_merge_pick</bpmn:incoming>
+      <bpmn:outgoing>Flow_C_gw_merge_pick__C_send_pickup</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sendTask id="C_send_pickup" name="Confirm pickup" messageRef="Message_pickup">
+      <bpmn:incoming>Flow_C_gw_merge_pick__C_send_pickup</bpmn:incoming>
+      <bpmn:outgoing>Flow_C_send_pickup__C_st_load</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:task id="C_st_load" name="Load truck">
+      <bpmn:incoming>Flow_C_send_pickup__C_st_load</bpmn:incoming>
+      <bpmn:outgoing>Flow_C_st_load__C_st_drive</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="C_st_drive" name="Drive to customer">
+      <bpmn:incoming>Flow_C_st_load__C_st_drive</bpmn:incoming>
+      <bpmn:outgoing>Flow_C_st_drive__C_throw_notice</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:sendTask id="C_throw_notice" name="Send delivery notice" messageRef="Message_notice">
+      <bpmn:incoming>Flow_C_st_drive__C_throw_notice</bpmn:incoming>
+      <bpmn:outgoing>Flow_C_throw_notice__C_evgw</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:eventBasedGateway id="C_evgw">
+      <bpmn:incoming>Flow_C_throw_notice__C_evgw</bpmn:incoming>
+      <bpmn:outgoing>Flow_C_evgw__C_catch_pod</bpmn:outgoing>
+      <bpmn:outgoing>Flow_C_evgw__C_catch_damage</bpmn:outgoing>
+    </bpmn:eventBasedGateway>
+    <bpmn:intermediateCatchEvent id="C_catch_pod" name="Proof of delivery received">
+      <bpmn:incoming>Flow_C_evgw__C_catch_pod</bpmn:incoming>
+      <bpmn:outgoing>Flow_C_catch_pod__C_gw_merge_pod</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="C_catch_pod_def" messageRef="Message_pod"/>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:intermediateCatchEvent id="C_catch_damage" name="Damage report received">
+      <bpmn:incoming>Flow_C_evgw__C_catch_damage</bpmn:incoming>
+      <bpmn:outgoing>Flow_C_catch_damage__C_claim</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="C_catch_damage_def" messageRef="Message_damage"/>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:task id="C_claim" name="File damage claim">
+      <bpmn:incoming>Flow_C_catch_damage__C_claim</bpmn:incoming>
+      <bpmn:outgoing>Flow_C_claim__C_gw_merge_pod</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="C_gw_merge_pod">
+      <bpmn:incoming>Flow_C_catch_pod__C_gw_merge_pod</bpmn:incoming>
+      <bpmn:incoming>Flow_C_claim__C_gw_merge_pod</bpmn:incoming>
+      <bpmn:outgoing>Flow_C_gw_merge_pod__C_prep_invoice</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="C_prep_invoice" name="Prepare freight invoice">
+      <bpmn:incoming>Flow_C_gw_merge_pod__C_prep_invoice</bpmn:incoming>
+      <bpmn:outgoing>Flow_C_prep_invoice__C_gw_surcharge</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="C_gw_surcharge" name="Fuel surcharge threshold exceeded?" default="Flow_C_gw_surcharge__C_gw_merge_inv">
+      <bpmn:incoming>Flow_C_prep_invoice__C_gw_surcharge</bpmn:incoming>
+      <bpmn:outgoing>Flow_C_gw_surcharge__C_gw_merge_inv</bpmn:outgoing>
+      <bpmn:outgoing>Flow_C_gw_surcharge__C_surcharge</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="C_surcharge" name="Apply fuel surcharge">
+      <bpmn:incoming>Flow_C_gw_surcharge__C_surcharge</bpmn:incoming>
+      <bpmn:outgoing>Flow_C_surcharge__C_gw_merge_inv</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="C_gw_merge_inv">
+      <bpmn:incoming>Flow_C_gw_surcharge__C_gw_merge_inv</bpmn:incoming>
+      <bpmn:incoming>Flow_C_surcharge__C_gw_merge_inv</bpmn:incoming>
+      <bpmn:outgoing>Flow_C_gw_merge_inv__C_send_finv</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sendTask id="C_send_finv" name="Send freight invoice" messageRef="Message_finv">
+      <bpmn:incoming>Flow_C_gw_merge_inv__C_send_finv</bpmn:incoming>
+      <bpmn:outgoing>Flow_C_send_finv__C_catch_fpay</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:intermediateCatchEvent id="C_catch_fpay" name="Freight payment received">
+      <bpmn:incoming>Flow_C_send_finv__C_catch_fpay</bpmn:incoming>
+      <bpmn:outgoing>Flow_C_catch_fpay__C_end_term</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="C_catch_fpay_def" messageRef="Message_fpay"/>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:endEvent id="C_end_term" name="Transport order closed">
+      <bpmn:incoming>Flow_C_catch_fpay__C_end_term</bpmn:incoming>
+      <bpmn:terminateEventDefinition id="C_end_term_def"/>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_C_start_msg__C_wait_slot" sourceRef="C_start_msg" targetRef="C_wait_slot"/>
+    <bpmn:sequenceFlow id="Flow_C_wait_slot__C_wait_truck" sourceRef="C_wait_slot" targetRef="C_wait_truck"/>
+    <bpmn:sequenceFlow id="Flow_C_wait_truck__C_catch_ready" sourceRef="C_wait_truck" targetRef="C_catch_ready"/>
+    <bpmn:sequenceFlow id="Flow_C_catch_ready__C_pickup" sourceRef="C_catch_ready" targetRef="C_pickup"/>
+    <bpmn:sequenceFlow id="Flow_C_pickup__C_gw_road" sourceRef="C_pickup" targetRef="C_gw_road"/>
+    <bpmn:sequenceFlow id="Flow_C_gw_road__C_gw_merge_pick" sourceRef="C_gw_road" targetRef="C_gw_merge_pick" name="no"/>
+    <bpmn:sequenceFlow id="Flow_C_gw_road__C_reroute" sourceRef="C_gw_road" targetRef="C_reroute" name="yes"/>
+    <bpmn:sequenceFlow id="Flow_C_reroute__C_gw_merge_pick" sourceRef="C_reroute" targetRef="C_gw_merge_pick"/>
+    <bpmn:sequenceFlow id="Flow_C_gw_merge_pick__C_send_pickup" sourceRef="C_gw_merge_pick" targetRef="C_send_pickup"/>
+    <bpmn:sequenceFlow id="Flow_C_send_pickup__C_st_load" sourceRef="C_send_pickup" targetRef="C_st_load"/>
+    <bpmn:sequenceFlow id="Flow_C_st_load__C_st_drive" sourceRef="C_st_load" targetRef="C_st_drive"/>
+    <bpmn:sequenceFlow id="Flow_C_st_drive__C_throw_notice" sourceRef="C_st_drive" targetRef="C_throw_notice"/>
+    <bpmn:sequenceFlow id="Flow_C_throw_notice__C_evgw" sourceRef="C_throw_notice" targetRef="C_evgw"/>
+    <bpmn:sequenceFlow id="Flow_C_evgw__C_catch_pod" sourceRef="C_evgw" targetRef="C_catch_pod"/>
+    <bpmn:sequenceFlow id="Flow_C_evgw__C_catch_damage" sourceRef="C_evgw" targetRef="C_catch_damage"/>
+    <bpmn:sequenceFlow id="Flow_C_catch_pod__C_gw_merge_pod" sourceRef="C_catch_pod" targetRef="C_gw_merge_pod"/>
+    <bpmn:sequenceFlow id="Flow_C_catch_damage__C_claim" sourceRef="C_catch_damage" targetRef="C_claim"/>
+    <bpmn:sequenceFlow id="Flow_C_claim__C_gw_merge_pod" sourceRef="C_claim" targetRef="C_gw_merge_pod"/>
+    <bpmn:sequenceFlow id="Flow_C_gw_merge_pod__C_prep_invoice" sourceRef="C_gw_merge_pod" targetRef="C_prep_invoice"/>
+    <bpmn:sequenceFlow id="Flow_C_prep_invoice__C_gw_surcharge" sourceRef="C_prep_invoice" targetRef="C_gw_surcharge"/>
+    <bpmn:sequenceFlow id="Flow_C_gw_surcharge__C_gw_merge_inv" sourceRef="C_gw_surcharge" targetRef="C_gw_merge_inv" name="no"/>
+    <bpmn:sequenceFlow id="Flow_C_gw_surcharge__C_surcharge" sourceRef="C_gw_surcharge" targetRef="C_surcharge" name="yes"/>
+    <bpmn:sequenceFlow id="Flow_C_surcharge__C_gw_merge_inv" sourceRef="C_surcharge" targetRef="C_gw_merge_inv"/>
+    <bpmn:sequenceFlow id="Flow_C_gw_merge_inv__C_send_finv" sourceRef="C_gw_merge_inv" targetRef="C_send_finv"/>
+    <bpmn:sequenceFlow id="Flow_C_send_finv__C_catch_fpay" sourceRef="C_send_finv" targetRef="C_catch_fpay"/>
+    <bpmn:sequenceFlow id="Flow_C_catch_fpay__C_end_term" sourceRef="C_catch_fpay" targetRef="C_end_term"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collaboration_PartyC">
+      <bpmndi:BPMNShape id="Participant_PartyC_di" bpmnElement="Participant_PartyC" isHorizontal="true">
+        <dc:Bounds x="100" y="1180" width="8780" height="240"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Participant_PartyB_di" bpmnElement="Participant_PartyB" isHorizontal="true">
+        <dc:Bounds x="100" y="1075.0" width="8780" height="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Participant_PartyA_di" bpmnElement="Participant_PartyA" isHorizontal="true">
+        <dc:Bounds x="100" y="995.0" width="8780" height="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="C_start_msg_di" bpmnElement="C_start_msg">
+        <dc:Bounds x="2752.0" y="1222.0" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="C_wait_slot_di" bpmnElement="C_wait_slot">
+        <dc:Bounds x="2860.0" y="1200.0" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="C_wait_truck_di" bpmnElement="C_wait_truck">
+        <dc:Bounds x="3000.0" y="1200.0" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="C_catch_ready_di" bpmnElement="C_catch_ready">
+        <dc:Bounds x="4292.0" y="1222.0" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="C_pickup_di" bpmnElement="C_pickup">
+        <dc:Bounds x="4400.0" y="1200.0" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="C_gw_road_di" bpmnElement="C_gw_road" isMarkerVisible="true">
+        <dc:Bounds x="4565.0" y="1215.0" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="C_reroute_di" bpmnElement="C_reroute">
+        <dc:Bounds x="4680.0" y="1320.0" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="C_gw_merge_pick_di" bpmnElement="C_gw_merge_pick" isMarkerVisible="true">
+        <dc:Bounds x="4845.0" y="1215.0" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="C_send_pickup_di" bpmnElement="C_send_pickup">
+        <dc:Bounds x="4960.0" y="1200.0" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="C_st_load_di" bpmnElement="C_st_load">
+        <dc:Bounds x="5100.0" y="1200.0" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="C_st_drive_di" bpmnElement="C_st_drive">
+        <dc:Bounds x="5240.0" y="1200.0" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="C_throw_notice_di" bpmnElement="C_throw_notice">
+        <dc:Bounds x="5380.0" y="1200.0" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="C_evgw_di" bpmnElement="C_evgw">
+        <dc:Bounds x="6385.0" y="1215.0" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="C_catch_pod_di" bpmnElement="C_catch_pod">
+        <dc:Bounds x="6532.0" y="1222.0" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="C_catch_damage_di" bpmnElement="C_catch_damage">
+        <dc:Bounds x="6672.0" y="1342.0" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="C_claim_di" bpmnElement="C_claim">
+        <dc:Bounds x="6780.0" y="1320.0" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="C_gw_merge_pod_di" bpmnElement="C_gw_merge_pod" isMarkerVisible="true">
+        <dc:Bounds x="6945.0" y="1215.0" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="C_prep_invoice_di" bpmnElement="C_prep_invoice">
+        <dc:Bounds x="7060.0" y="1200.0" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="C_gw_surcharge_di" bpmnElement="C_gw_surcharge" isMarkerVisible="true">
+        <dc:Bounds x="7225.0" y="1215.0" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="C_surcharge_di" bpmnElement="C_surcharge">
+        <dc:Bounds x="7340.0" y="1320.0" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="C_gw_merge_inv_di" bpmnElement="C_gw_merge_inv" isMarkerVisible="true">
+        <dc:Bounds x="7505.0" y="1215.0" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="C_send_finv_di" bpmnElement="C_send_finv">
+        <dc:Bounds x="7620.0" y="1200.0" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="C_catch_fpay_di" bpmnElement="C_catch_fpay">
+        <dc:Bounds x="8072.0" y="1222.0" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="C_end_term_di" bpmnElement="C_end_term">
+        <dc:Bounds x="8212.0" y="1222.0" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_C_start_msg__C_wait_slot_di" bpmnElement="Flow_C_start_msg__C_wait_slot">
+        <di:waypoint x="2788.0" y="1240.0"/>
+        <di:waypoint x="2860.0" y="1240.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_C_wait_slot__C_wait_truck_di" bpmnElement="Flow_C_wait_slot__C_wait_truck">
+        <di:waypoint x="2960.0" y="1240.0"/>
+        <di:waypoint x="3000.0" y="1240.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_C_wait_truck__C_catch_ready_di" bpmnElement="Flow_C_wait_truck__C_catch_ready">
+        <di:waypoint x="3100.0" y="1240.0"/>
+        <di:waypoint x="4292.0" y="1240.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_C_catch_ready__C_pickup_di" bpmnElement="Flow_C_catch_ready__C_pickup">
+        <di:waypoint x="4328.0" y="1240.0"/>
+        <di:waypoint x="4400.0" y="1240.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_C_pickup__C_gw_road_di" bpmnElement="Flow_C_pickup__C_gw_road">
+        <di:waypoint x="4500.0" y="1240.0"/>
+        <di:waypoint x="4565.0" y="1240.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_C_gw_road__C_gw_merge_pick_di" bpmnElement="Flow_C_gw_road__C_gw_merge_pick">
+        <di:waypoint x="4615.0" y="1240.0"/>
+        <di:waypoint x="4845.0" y="1240.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_C_gw_road__C_reroute_di" bpmnElement="Flow_C_gw_road__C_reroute">
+        <di:waypoint x="4590.0" y="1265.0"/>
+        <di:waypoint x="4590.0" y="1360.0"/>
+        <di:waypoint x="4680.0" y="1360.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_C_reroute__C_gw_merge_pick_di" bpmnElement="Flow_C_reroute__C_gw_merge_pick">
+        <di:waypoint x="4780.0" y="1360.0"/>
+        <di:waypoint x="4870.0" y="1360.0"/>
+        <di:waypoint x="4870.0" y="1265.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_C_gw_merge_pick__C_send_pickup_di" bpmnElement="Flow_C_gw_merge_pick__C_send_pickup">
+        <di:waypoint x="4895.0" y="1240.0"/>
+        <di:waypoint x="4960.0" y="1240.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_C_send_pickup__C_st_load_di" bpmnElement="Flow_C_send_pickup__C_st_load">
+        <di:waypoint x="5060.0" y="1240.0"/>
+        <di:waypoint x="5100.0" y="1240.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_C_st_load__C_st_drive_di" bpmnElement="Flow_C_st_load__C_st_drive">
+        <di:waypoint x="5200.0" y="1240.0"/>
+        <di:waypoint x="5240.0" y="1240.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_C_st_drive__C_throw_notice_di" bpmnElement="Flow_C_st_drive__C_throw_notice">
+        <di:waypoint x="5340.0" y="1240.0"/>
+        <di:waypoint x="5380.0" y="1240.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_C_throw_notice__C_evgw_di" bpmnElement="Flow_C_throw_notice__C_evgw">
+        <di:waypoint x="5480.0" y="1240.0"/>
+        <di:waypoint x="6385.0" y="1240.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_C_evgw__C_catch_pod_di" bpmnElement="Flow_C_evgw__C_catch_pod">
+        <di:waypoint x="6435.0" y="1240.0"/>
+        <di:waypoint x="6532.0" y="1240.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_C_evgw__C_catch_damage_di" bpmnElement="Flow_C_evgw__C_catch_damage">
+        <di:waypoint x="6410.0" y="1265.0"/>
+        <di:waypoint x="6410.0" y="1360.0"/>
+        <di:waypoint x="6672.0" y="1360.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_C_catch_pod__C_gw_merge_pod_di" bpmnElement="Flow_C_catch_pod__C_gw_merge_pod">
+        <di:waypoint x="6568.0" y="1240.0"/>
+        <di:waypoint x="6945.0" y="1240.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_C_catch_damage__C_claim_di" bpmnElement="Flow_C_catch_damage__C_claim">
+        <di:waypoint x="6708.0" y="1360.0"/>
+        <di:waypoint x="6780.0" y="1360.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_C_claim__C_gw_merge_pod_di" bpmnElement="Flow_C_claim__C_gw_merge_pod">
+        <di:waypoint x="6880.0" y="1360.0"/>
+        <di:waypoint x="6970.0" y="1360.0"/>
+        <di:waypoint x="6970.0" y="1265.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_C_gw_merge_pod__C_prep_invoice_di" bpmnElement="Flow_C_gw_merge_pod__C_prep_invoice">
+        <di:waypoint x="6995.0" y="1240.0"/>
+        <di:waypoint x="7060.0" y="1240.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_C_prep_invoice__C_gw_surcharge_di" bpmnElement="Flow_C_prep_invoice__C_gw_surcharge">
+        <di:waypoint x="7160.0" y="1240.0"/>
+        <di:waypoint x="7225.0" y="1240.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_C_gw_surcharge__C_gw_merge_inv_di" bpmnElement="Flow_C_gw_surcharge__C_gw_merge_inv">
+        <di:waypoint x="7275.0" y="1240.0"/>
+        <di:waypoint x="7505.0" y="1240.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_C_gw_surcharge__C_surcharge_di" bpmnElement="Flow_C_gw_surcharge__C_surcharge">
+        <di:waypoint x="7250.0" y="1265.0"/>
+        <di:waypoint x="7250.0" y="1360.0"/>
+        <di:waypoint x="7340.0" y="1360.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_C_surcharge__C_gw_merge_inv_di" bpmnElement="Flow_C_surcharge__C_gw_merge_inv">
+        <di:waypoint x="7440.0" y="1360.0"/>
+        <di:waypoint x="7530.0" y="1360.0"/>
+        <di:waypoint x="7530.0" y="1265.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_C_gw_merge_inv__C_send_finv_di" bpmnElement="Flow_C_gw_merge_inv__C_send_finv">
+        <di:waypoint x="7555.0" y="1240.0"/>
+        <di:waypoint x="7620.0" y="1240.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_C_send_finv__C_catch_fpay_di" bpmnElement="Flow_C_send_finv__C_catch_fpay">
+        <di:waypoint x="7720.0" y="1240.0"/>
+        <di:waypoint x="8072.0" y="1240.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_C_catch_fpay__C_end_term_di" bpmnElement="Flow_C_catch_fpay__C_end_term">
+        <di:waypoint x="8108.0" y="1240.0"/>
+        <di:waypoint x="8212.0" y="1240.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_transport_di" bpmnElement="MF_transport">
+        <di:waypoint x="2770.0" y="1135.0"/>
+        <di:waypoint x="2770.0" y="1222.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_ready_di" bpmnElement="MF_ready">
+        <di:waypoint x="4310.0" y="1135.0"/>
+        <di:waypoint x="4310.0" y="1222.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_pickup_di" bpmnElement="MF_pickup">
+        <di:waypoint x="5010.0" y="1200.0"/>
+        <di:waypoint x="5010.0" y="1135.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_notice_di" bpmnElement="MF_notice">
+        <di:waypoint x="5430.0" y="1200.0"/>
+        <di:waypoint x="5430.0" y="1055.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_pod_di" bpmnElement="MF_pod">
+        <di:waypoint x="6550.0" y="1055.0"/>
+        <di:waypoint x="6550.0" y="1222.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_damage_di" bpmnElement="MF_damage">
+        <di:waypoint x="6690.0" y="1055.0"/>
+        <di:waypoint x="6690.0" y="1342.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_finv_di" bpmnElement="MF_finv">
+        <di:waypoint x="7670.0" y="1200.0"/>
+        <di:waypoint x="7670.0" y="1135.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_fpay_di" bpmnElement="MF_fpay">
+        <di:waypoint x="8090.0" y="1135.0"/>
+        <di:waypoint x="8090.0" y="1222.0"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
