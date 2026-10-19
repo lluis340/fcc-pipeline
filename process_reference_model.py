@@ -1,12 +1,9 @@
-import sys
-
 import pm4py
 import xml.etree.ElementTree as ET
 
 from collections import deque
 from copy import deepcopy
 from pathlib import Path
-from lxml import etree
 from pm4py import PetriNet
 from pm4py.objects.bpmn.importer import importer as bpmn_importer
 from pm4py.objects.conversion.bpmn.variants import to_petri_net
@@ -32,58 +29,6 @@ class ReferenceModelError(ValueError):
                                    element_type and f"{element_type} {element_id!r}",
                                    variant is not None and f"variant {variant}") if part]
         super().__init__(f"{', '.join(where)}: {reason}" if where else reason)
-
-
-# Just a helper method to split collaborative bpmns into org-wide bpmns
-def create_org_wide_bpmn_models(path, output_path):
-    root = etree.parse(path).getroot()
-    collaboration = root.find(f'{NS}collaboration')
-    models = {}
-    if len(collaboration.findall(f'{NS}participant')) == 1:
-        return None
-    message_flows = {flow: [flow.get('sourceRef'), flow.get('targetRef')]
-                     for flow in collaboration.findall(f'{NS}messageFlow')}
-    participants_by_id = {p.get('id'): p for p in collaboration.findall(f'{NS}participant')}
-    pool = {el.get('id'): pid
-            for pid, p in participants_by_id.items() if p.get('processRef')
-            for el in root.find(f'{NS}process[@id="{p.get("processRef")}"]').iter(etree.Element)
-            if el.get('id')}
-
-    for participant in collaboration.findall(f'{NS}participant'):
-        name = (participant.get('name') or '').strip()
-        process_ref = participant.get('processRef')
-        if not process_ref:
-            continue
-
-        process = root.find(f'{NS}process[@id="{process_ref}"]')
-        process_ids = {elem.get('id') for elem in process.iter(etree.Element) if elem.get('id')}
-
-        org_bpmn = etree.Element('definitions', nsmap={None: BPMN_URI})
-        org_bpmn.set('targetNamespace', f'http://fcc-pipeline.local/bpmn_{name}')
-
-        collab = etree.SubElement(org_bpmn, f'{NS}collaboration',
-                                  id=f'collab_{participant.get("id")}')
-        etree.SubElement(collab, f'{NS}participant',
-                         id=participant.get('id'), name=name, processRef=process_ref)
-        own_ids = {el.get('id') for el in process.iter(etree.Element) if el.get('id')}
-        own_flows = [flow for flow, refs in message_flows.items()
-                     if (refs[0] in own_ids) != (refs[1] in own_ids)]
-        other_process_refs = (ref for flow in own_flows for ref in message_flows[flow] if ref not in own_ids)
-        for box in dict.fromkeys(pool.get(ref, ref) for ref in other_process_refs):
-            etree.SubElement(collab, f'{NS}participant',
-                             id=box, name=participants_by_id[box].get('name') or box)
-        for flow in own_flows:
-            new_flow = deepcopy(flow)
-            for end in ('sourceRef', 'targetRef'):
-                if new_flow.get(end) not in own_ids:
-                    new_flow.set(end, pool.get(new_flow.get(end), new_flow.get(end)))
-            collab.append(new_flow)
-
-        org_bpmn.append(deepcopy(process))
-        org_bpmn_path = f"{output_path}/{name}.bpmn"
-        etree.ElementTree(org_bpmn).write(org_bpmn_path, xml_declaration=True, encoding='UTF-8')
-        models[name] = org_bpmn_path
-    return models
 
 
 # Guarantee of this module: for every valid BPMN collaboration model, the translation either yields a structurally

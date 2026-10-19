@@ -4,7 +4,7 @@ from datetime import date
 from pm4py.objects.log.obj import Event, Trace, EventLog
 
 
-def mergeLogs(logs):
+def merge_logs(logs):
     trace_groups, composed_id_to_trace, uf = group_traces(logs)
     merged_log = merge(trace_groups, composed_id_to_trace)
     return merged_log

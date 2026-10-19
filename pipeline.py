@@ -1,6 +1,5 @@
 import os
 import sys
-sys._pm4py_welcome_shown = True
 
 import pm4py
 from pathlib import Path
@@ -10,7 +9,7 @@ from pm4py.objects.log.exporter.xes import exporter as xes_exporter
 from pm4py.objects.log.importer.xes import importer as xes_importer
 
 from log_preprocessing import preprocess
-from merge import mergeLogs
+from merge import merge_logs
 from check_conformance import check_conformance, get_globals
 from check_local_conformance import check_local_conformance, check_private_layer
 from process_reference_model import translate_model
@@ -19,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent / "external" / "collaborationminer"
 import collaboration_miner as cm
 
 
-def main(path, custom_attribute_names=False, **kwargs):
+def execute(path, **kwargs):
     if not path:
         print("ERROR: Path is missing")
         sys.exit()
@@ -28,10 +27,8 @@ def main(path, custom_attribute_names=False, **kwargs):
         sys.exit()
 
     ''' DECLARE ATTRIBUTE NAMES '''
-    if custom_attribute_names:
-        config.set_attributes(**kwargs)
+    config.set_attributes(**kwargs)
 
-    ''' COLLECT INPUT LOGS (AND MODELS) '''
     exec_num = 1
     private_logs = []
     models = None
@@ -39,26 +36,25 @@ def main(path, custom_attribute_names=False, **kwargs):
     os.makedirs(f"{path}/merged_logs", exist_ok=True)
     os.makedirs(f"{path}/output", exist_ok=True)
 
-    # -- find the highest existing execution number
     for f in Path(f"{path}/merged_logs").iterdir():
         if f.is_file() and f.suffix == ".xes" and f.stem.startswith("merged_log_v"):
             suffix = f.stem.removeprefix("merged_log_v")
             if suffix.isdigit() and int(suffix) >= exec_num:
                 exec_num = int(suffix) + 1
 
-    # -- collect all event logs
+    ''' COLLECT ALL EVENT LOGS '''
     file_name_to_log_id = {}
     for f in Path(path).iterdir():
         if f.is_file() and f.suffix == ".xes":
             log = xes_importer.apply(str(f))
             private_logs.append(log)
             file_name_to_log_id[f.stem] = log.attributes.get(config.ATTRIBUTES.log_id)
-        # -- collect dirty logs
+
         if f.is_dir() and f.name == "dirty_logs":
             dirty_private_logs = [xes_importer.apply(str(file)) for file in f.iterdir()
                                   if file.is_file() and file.suffix == ".xes"]
 
-    # -- collect models
+    ''' COLLECT MODELS (IF PRESENT) '''
     log_id_to_model = {}
     for f in Path(path).iterdir():
         if f.is_dir() and f.name == "models":
@@ -80,7 +76,7 @@ def main(path, custom_attribute_names=False, **kwargs):
     public_logs = preprocess(private_logs)
 
     ''' MERGING '''
-    merged_log = mergeLogs(public_logs)
+    merged_log = merge_logs(public_logs)
     merged_log_path = f"{path}/merged_logs/merged_log_v{exec_num}.xes"
     xes_exporter.apply(merged_log, merged_log_path)
 
@@ -110,9 +106,9 @@ def main(path, custom_attribute_names=False, **kwargs):
 
     ''' PROCESS PIPELINE AGAIN FOR DIRTY LOGS '''
     if dirty_private_logs:
-        dirty_public_logs = preprocess(dirty_private_logs)
-        merged_dirty_log = mergeLogs(dirty_public_logs)
         dirty_local_cc_results = None
+        dirty_public_logs = preprocess(dirty_private_logs)
+        merged_dirty_log = merge_logs(dirty_public_logs)
         if models:
             dirty_local_cc_results = {}
             for log_id, model in log_id_to_model.items():
@@ -192,4 +188,4 @@ if __name__ == '__main__':
     if not Path(sys.argv[1]).is_dir():
         print("ERROR: Path does not exist")
         sys.exit()
-    main(path=sys.argv[1])
+    execute(path=sys.argv[1])
